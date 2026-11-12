@@ -3,10 +3,17 @@ import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Field, SelectInput, TextInput } from '../../components/Field'
+import { SkeletonTable } from '../../components/Loading'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { writeAuditLog } from '../../lib/audit'
-import { ALL_ROLES, ROLE_LABELS, canManageEmployees, canViewEmployees } from '../../lib/roles'
+import {
+  ALL_ROLES,
+  ROLE_LABELS,
+  canEditEmployees,
+  canManageEmployees,
+  canViewEmployees,
+} from '../../lib/roles'
 import { supabase } from '../../lib/supabase'
 import type { AppRole, Branch, Profile } from '../../types/database'
 
@@ -32,10 +39,41 @@ const emptyForm: EmployeeForm = {
   active: true,
 }
 
+async function readFunctionError(fnError: { message: string; context?: Response }): Promise<string> {
+  const context = fnError.context
+  if (context) {
+    try {
+      const body = (await context.clone().json()) as { error?: string }
+      if (body?.error) return body.error
+    } catch {
+      // response body was not JSON — keep the default message
+    }
+  }
+  return fnError.message
+}
+
+async function callAdminUpdate(body: Record<string, unknown>): Promise<{ error?: string }> {
+  const { data, error: fnError } = await supabase.functions.invoke('admin-update-user', { body })
+  if (fnError) {
+    const notDeployed =
+      fnError.name === 'FunctionsFetchError' || fnError.message.includes('Failed to send')
+    if (notDeployed) {
+      return {
+        error:
+          'Changing sign-in credentials needs the admin-update-user function. Deploy it with "npx supabase functions deploy admin-update-user --no-verify-jwt --project-ref ylpcutmsolvmloqjnwze".',
+      }
+    }
+    return { error: await readFunctionError(fnError) }
+  }
+  if (data?.error) return { error: String(data.error) }
+  return {}
+}
+
 export function EmployeesPage() {
   const { user } = useAuth()
   const role = user!.profile.role
   const canManage = canManageEmployees(role)
+  const canEdit = canEditEmployees(role)
   const canView = canViewEmployees(role)
 
   const [employees, setEmployees] = useState<Profile[]>([])
@@ -47,6 +85,7 @@ export function EmployeesPage() {
   const [form, setForm] = useState<EmployeeForm>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
+  const editingProfile = editingId ? employees.find((e) => e.id === editingId) ?? null : null
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -106,7 +145,7 @@ export function EmployeesPage() {
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
-    if (!canManage) return
+    if (!canEdit) return
     if (!form.full_name.trim()) {
       setError('Enter the employee name.')
       return
@@ -121,13 +160,29 @@ export function EmployeesPage() {
 
     if (editingId) {
       const old = employees.find((e) => e.id === editingId)
+      const nextEmail = form.email.trim()
+      const emailChanged = nextEmail !== '' && nextEmail !== (old?.email ?? '')
+      let credentialsChanged = false
+      if (canManage && (emailChanged || form.password)) {
+        const { error: credError } = await callAdminUpdate({
+          userId: editingId,
+          ...(emailChanged ? { email: nextEmail } : {}),
+          ...(form.password ? { password: form.password } : {}),
+        })
+        if (credError) {
+          setSaving(false)
+          setError(credError)
+          return
+        }
+        credentialsChanged = true
+      }
       const payload = {
         full_name: form.full_name.trim(),
         phone: form.phone.trim() || null,
         role: form.role,
         branch_id: form.branch_id || null,
         active: form.active,
-        email: form.email.trim() || null,
+        email: nextEmail || null,
       }
       const { error: updateError } = await supabase.from('profiles').update(payload).eq('id', editingId)
       setSaving(false)
@@ -140,11 +195,17 @@ export function EmployeesPage() {
         tableName: 'profiles',
         recordId: editingId,
         oldValue: old as unknown as Record<string, unknown>,
-        newValue: payload,
+        newValue: { ...payload, credentials_changed: credentialsChanged },
       })
-      setMessage('Employee updated.')
+      setMessage(credentialsChanged ? 'Employee and sign-in credentials updated.' : 'Employee updated.')
       setShowForm(false)
       await load()
+      return
+    }
+
+    if (!canManage) {
+      setSaving(false)
+      setError('Only System Admin can create employees.')
       return
     }
 
@@ -193,7 +254,11 @@ export function EmployeesPage() {
   }
 
   async function deactivate(profile: Profile) {
-    if (!canManage) return
+    if (!canEdit) return
+    if (!canManage && profile.role === 'system_admin') {
+      setError('Only System Admin can change a System Admin account.')
+      return
+    }
     const { error: updateError } = await supabase
       .from('profiles')
       .update({ active: false })
@@ -218,7 +283,10 @@ export function EmployeesPage() {
       <div className="page-header">
         <div>
           <h1>Employees & Roles</h1>
-          <p>Assign role and branch. Only System Admin can add or edit.</p>
+          <p>
+            Owner, General Accountant and System Admin can edit profiles. Passwords and login emails are
+            System Admin only.
+          </p>
         </div>
         {canManage ? (
           <Button
@@ -238,7 +306,7 @@ export function EmployeesPage() {
       {error ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
 
-      {showForm && canManage ? (
+      {showForm && canEdit ? (
         <Card title={editingId ? 'Edit employee' : 'Add employee'}>
           <form className="stack" onSubmit={onSubmit}>
             <Field label="Full name" htmlFor="emp-name">
@@ -249,11 +317,24 @@ export function EmployeesPage() {
                 onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
               />
             </Field>
-            <Field label="Email" htmlFor="emp-email">
+            <Field
+              label="Email"
+              htmlFor="emp-email"
+              hint={
+                editingProfile?.role === 'system_admin'
+                  ? 'The System Admin login email is changed in the Supabase dashboard.'
+                  : editingId && !canManage
+                    ? 'Only System Admin can change a sign-in email.'
+                    : 'This is also the sign-in email.'
+              }
+            >
               <TextInput
                 id="emp-email"
                 type="email"
                 required={!editingId}
+                disabled={
+                  (Boolean(editingId) && !canManage) || editingProfile?.role === 'system_admin'
+                }
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
               />
@@ -265,6 +346,21 @@ export function EmployeesPage() {
                   type="password"
                   required
                   minLength={8}
+                  value={form.password}
+                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                />
+              </Field>
+            ) : canManage ? (
+              <Field
+                label="New password"
+                htmlFor="emp-password"
+                hint="System Admin only. Leave blank to keep the current password."
+              >
+                <TextInput
+                  id="emp-password"
+                  type="password"
+                  minLength={8}
+                  placeholder="Leave blank to keep current password"
                   value={form.password}
                   onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                 />
@@ -282,9 +378,10 @@ export function EmployeesPage() {
                 id="emp-role"
                 required
                 value={form.role}
+                disabled={editingProfile?.role === 'system_admin' && !canManage}
                 onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as AppRole }))}
               >
-                {ALL_ROLES.map((r) => (
+                {ALL_ROLES.filter((r) => canManage || r !== 'system_admin').map((r) => (
                   <option key={r} value={r}>
                     {ROLE_LABELS[r]}
                   </option>
@@ -319,8 +416,8 @@ export function EmployeesPage() {
               </Field>
             ) : null}
             <div className="row">
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create employee'}
+              <Button type="submit" loading={saving}>
+                {editingId ? 'Save changes' : 'Create employee'}
               </Button>
               <Button
                 type="button"
@@ -337,8 +434,10 @@ export function EmployeesPage() {
         </Card>
       ) : null}
 
-      <Card title="Directory" subtitle={loading ? 'Loading…' : `${employees.length} people`}>
-        {employees.length === 0 && !loading ? (
+      <Card title="Directory" subtitle={loading ? undefined : `${employees.length} people`}>
+        {loading ? (
+          <SkeletonTable rows={4} cols={5} />
+        ) : employees.length === 0 ? (
           <div className="empty-state">No employees yet.</div>
         ) : (
           <Table>
@@ -365,12 +464,15 @@ export function EmployeesPage() {
                   </td>
                   <td>
                     <div className="row">
-                      {canManage ? (
+                      {canEdit && (canManage || emp.role !== 'system_admin') ? (
                         <Button variant="secondary" onClick={() => startEdit(emp)}>
                           Edit
                         </Button>
                       ) : null}
-                      {canManage && emp.active && emp.id !== user!.id ? (
+                      {canEdit &&
+                      emp.active &&
+                      emp.id !== user!.id &&
+                      (canManage || emp.role !== 'system_admin') ? (
                         <Button variant="danger" onClick={() => void deactivate(emp)}>
                           Deactivate
                         </Button>

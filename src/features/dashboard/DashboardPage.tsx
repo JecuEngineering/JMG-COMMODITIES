@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge } from '../../components/Badge'
+import { SkeletonText } from '../../components/Loading'
 import { Card } from '../../components/Card'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -235,8 +236,10 @@ export function DashboardPage() {
       <div className="dash-split">
         {canViewSales(role) ? (
           <Card title="Sales by variety · this week" subtitle="Revenue from encoded sales, last 7 days">
-            {varietyTotals.length === 0 ? (
-              <p className="faint">{loading ? 'Loading…' : 'No sales in the last 7 days for this scope.'}</p>
+            {loading ? (
+              <SkeletonText lines={4} />
+            ) : varietyTotals.length === 0 ? (
+              <p className="faint">No sales in the last 7 days for this scope.</p>
             ) : (
               <div className="dash-bars">
                 {varietyTotals.map(([name, amount]) => (
@@ -257,8 +260,10 @@ export function DashboardPage() {
         ) : null}
 
         <Card title="Stock on hand" subtitle={branchId ? scopeLabel : 'All branches combined'}>
-          {stockRows.length === 0 ? (
-            <p className="faint">{loading ? 'Loading…' : 'No SKUs set up yet.'}</p>
+          {loading ? (
+            <SkeletonText lines={4} />
+          ) : stockRows.length === 0 ? (
+            <p className="faint">No SKUs set up yet.</p>
           ) : (
             <div className="dash-stock-list">
               {stockRows.map((row) => (
@@ -286,8 +291,10 @@ export function DashboardPage() {
               : 'Requests still moving through the approval flow'
           }
         >
-          {awaiting.length === 0 ? (
-            <p className="faint">{loading ? 'Loading…' : 'Nothing is waiting on you right now.'}</p>
+          {loading ? (
+            <SkeletonText lines={3} />
+          ) : awaiting.length === 0 ? (
+            <p className="faint">Nothing is waiting on you right now.</p>
           ) : (
             <div className="dash-request-list">
               {awaiting.map((request) => {

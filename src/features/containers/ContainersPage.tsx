@@ -4,10 +4,12 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
+import { SkeletonTable } from '../../components/Loading'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches, fetchSkus, skuLabel } from '../inventory/inventoryApi'
 import { formatDate, todayInputValue } from '../../lib/dates'
+import { downloadCsv } from '../../lib/export'
 import { formatPhp } from '../../lib/money'
 import {
   canManageSuppliers,
@@ -27,6 +29,7 @@ import {
   fetchSuppliers,
   receiveContainer,
   recordPurchasePayment,
+  updateContainer,
   updateContainerStatus,
   type Container,
   type ContainerCostType,
@@ -60,6 +63,7 @@ export function ContainersPage() {
   const [branches, setBranches] = useState<Branch[]>([])
   const [skus, setSkus] = useState<Sku[]>([])
   const [loading, setLoading] = useState(true)
+  const [firstLoad, setFirstLoad] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string>('')
@@ -80,6 +84,7 @@ export function ContainersPage() {
   // Container form
   const [cSupplier, setCSupplier] = useState('')
   const [cPurchase, setCPurchase] = useState('')
+  const [cNumber, setCNumber] = useState('')
   const [cRef, setCRef] = useState('')
   const [cOrigin, setCOrigin] = useState('')
   const [cEta, setCEta] = useState('')
@@ -87,6 +92,17 @@ export function ContainersPage() {
   const [cSku, setCSku] = useState('')
   const [cExpected, setCExpected] = useState('')
   const [cNotes, setCNotes] = useState('')
+
+  // Edit container (including supplier)
+  const [editing, setEditing] = useState(false)
+  const [eSupplier, setESupplier] = useState('')
+  const [ePurchase, setEPurchase] = useState('')
+  const [eNumber, setENumber] = useState('')
+  const [eRef, setERef] = useState('')
+  const [eOrigin, setEOrigin] = useState('')
+  const [eEta, setEEta] = useState('')
+  const [eBranch, setEBranch] = useState('')
+  const [eNotes, setENotes] = useState('')
 
   // Cost form
   const [costType, setCostType] = useState<ContainerCostType>('purchase')
@@ -139,6 +155,7 @@ export function ContainersPage() {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
+      setFirstLoad(false)
     }
   }, [profileBranchId])
 
@@ -223,6 +240,7 @@ export function ContainersPage() {
       const id = await createContainer({
         supplier_id: cSupplier,
         purchase_id: cPurchase || null,
+        container_number: cNumber,
         supplier_ref: cRef.trim(),
         origin: cOrigin,
         expected_arrival: cEta || undefined,
@@ -231,6 +249,7 @@ export function ContainersPage() {
         lines: [{ sku_id: cSku, branch_id: cBranch, expected_sacks: Number(cExpected) }],
       })
       setMessage('Container created as In transit.')
+      setCNumber('')
       setCRef('')
       setCExpected('')
       setSelectedId(id)
@@ -302,6 +321,96 @@ export function ContainersPage() {
     }
   }
 
+  function startContainerEdit() {
+    if (!selected) return
+    setESupplier(selected.supplier_id)
+    setEPurchase(selected.purchase_id ?? '')
+    setENumber(selected.container_number ?? '')
+    setERef(selected.supplier_ref)
+    setEOrigin(selected.origin ?? '')
+    setEEta(selected.expected_arrival ?? '')
+    setEBranch(selected.primary_branch_id ?? '')
+    setENotes(selected.notes ?? '')
+    setEditing(true)
+    setError(null)
+    setMessage(null)
+  }
+
+  async function onUpdateContainer(event: FormEvent) {
+    event.preventDefault()
+    if (!selected || !canManage) return
+    if (!eSupplier) {
+      setError('Choose a supplier.')
+      return
+    }
+    if (!eRef.trim()) {
+      setError('Enter the supplier reference number.')
+      return
+    }
+    setError(null)
+    try {
+      await updateContainer({
+        id: selected.id,
+        supplier_id: eSupplier,
+        purchase_id: ePurchase || null,
+        container_number: eNumber,
+        supplier_ref: eRef.trim(),
+        origin: eOrigin,
+        expected_arrival: eEta || undefined,
+        primary_branch_id: eBranch,
+        notes: eNotes,
+      })
+      setMessage('Container details updated.')
+      setEditing(false)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  function exportContainers() {
+    downloadCsv(
+      `containers-${todayInputValue()}.csv`,
+      ['Container #', 'Supplier ref', 'Supplier', 'Origin', 'Primary branch', 'ETA', 'Arrived', 'Status', 'Expected sacks', 'Landed costs'],
+      containers.map((c) => [
+        c.container_number ?? '',
+        c.supplier_ref,
+        c.supplier?.name ?? '',
+        c.origin ?? '',
+        c.primary_branch?.name ?? '',
+        c.expected_arrival ?? '',
+        c.arrival_date ?? '',
+        c.status,
+        (c.lines ?? []).reduce((sum, line) => sum + Number(line.expected_sacks), 0),
+        containerLandedTotal(c.costs),
+      ]),
+    )
+  }
+
+  function exportPurchases() {
+    downloadCsv(
+      `supplier-purchases-${todayInputValue()}.csv`,
+      ['Date', 'Supplier', 'Total', 'Paid', 'Balance', 'Status', 'Notes'],
+      purchases.map((p) => [
+        p.purchase_date,
+        p.supplier?.name ?? '',
+        p.total,
+        p.paid_amount,
+        Number(p.total) - Number(p.paid_amount),
+        p.status,
+        p.notes ?? '',
+      ]),
+    )
+  }
+
+  function exportSuppliers() {
+    downloadCsv(
+      `suppliers-${todayInputValue()}.csv`,
+      ['Name', 'Contact', 'Notes'],
+      suppliers.map((s) => [s.name, s.contact ?? '', s.notes ?? '']),
+    )
+  }
+
   return (
     <div className="app-page stack">
       <div className="page-header">
@@ -325,7 +434,7 @@ export function ContainersPage() {
 
       {error ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
-      {loading ? <p className="muted">Loading…</p> : null}
+      {loading && firstLoad ? <SkeletonTable rows={5} cols={5} /> : null}
 
       {tab === 'suppliers' ? (
         <div className="stack">
@@ -345,7 +454,16 @@ export function ContainersPage() {
               </form>
             </Card>
           ) : null}
-          <Card title="Supplier list">
+          <Card
+            title="Supplier list"
+            action={
+              suppliers.length > 0 ? (
+                <Button variant="secondary" onClick={exportSuppliers}>
+                  Export CSV
+                </Button>
+              ) : undefined
+            }
+          >
             {suppliers.length === 0 ? (
               <div className="empty-state">No suppliers yet.</div>
             ) : (
@@ -456,7 +574,16 @@ export function ContainersPage() {
               )}
             </Card>
           ) : null}
-          <Card title="Purchases">
+          <Card
+            title="Purchases"
+            action={
+              purchases.length > 0 ? (
+                <Button variant="secondary" onClick={exportPurchases}>
+                  Export CSV
+                </Button>
+              ) : undefined
+            }
+          >
             {purchases.length === 0 ? (
               <div className="empty-state">No purchases yet.</div>
             ) : (
@@ -517,6 +644,9 @@ export function ContainersPage() {
                     ))}
                   </SelectInput>
                 </Field>
+                <Field label="Container number" htmlFor="c-number" hint="Shipping container ID, e.g. MSKU1234567">
+                  <TextInput id="c-number" value={cNumber} onChange={(e) => setCNumber(e.target.value)} />
+                </Field>
                 <Field label="Supplier reference #" htmlFor="c-ref">
                   <TextInput id="c-ref" required value={cRef} onChange={(e) => setCRef(e.target.value)} />
                 </Field>
@@ -560,13 +690,23 @@ export function ContainersPage() {
             </Card>
           ) : null}
 
-          <Card title="Container list">
+          <Card
+            title="Container list"
+            action={
+              containers.length > 0 ? (
+                <Button variant="secondary" onClick={exportContainers}>
+                  Export CSV
+                </Button>
+              ) : undefined
+            }
+          >
             {containers.length === 0 ? (
               <div className="empty-state">No containers yet.</div>
             ) : (
               <Table>
                 <thead>
                   <tr>
+                    <th>Container #</th>
                     <th>Ref</th>
                     <th>Supplier</th>
                     <th>Branch</th>
@@ -577,6 +717,7 @@ export function ContainersPage() {
                 <tbody>
                   {containers.map((c) => (
                     <tr key={c.id}>
+                      <td>{c.container_number || '—'}</td>
                       <td>{c.supplier_ref}</td>
                       <td>{c.supplier?.name ?? '—'}</td>
                       <td>{c.primary_branch?.name ?? '—'}</td>
@@ -607,8 +748,8 @@ export function ContainersPage() {
 
           {selected ? (
             <Card
-              title={`Container ${selected.supplier_ref}`}
-              subtitle={`${selected.supplier?.name ?? ''} · ${selected.status.replace('_', ' ')}`}
+              title={`Container ${selected.container_number || selected.supplier_ref}`}
+              subtitle={`${selected.container_number ? `Ref ${selected.supplier_ref} · ` : ''}${selected.supplier?.name ?? ''} · ${selected.status.replace('_', ' ')}`}
             >
               <div className="stack">
                 <p className="muted">
@@ -617,6 +758,11 @@ export function ContainersPage() {
                 </p>
 
                 <div className="row">
+                  {canManage && selected.status !== 'received' && selected.status !== 'closed' ? (
+                    <Button variant="secondary" onClick={() => (editing ? setEditing(false) : startContainerEdit())}>
+                      {editing ? 'Cancel edit' : 'Edit details / supplier'}
+                    </Button>
+                  ) : null}
                   {canReceive && selected.status === 'in_transit' ? (
                     <Button variant="secondary" onClick={() => void onMark('arrived')}>
                       Mark arrived
@@ -633,6 +779,71 @@ export function ContainersPage() {
                     </Button>
                   ) : null}
                 </div>
+
+                {editing ? (
+                  <form className="stack" onSubmit={onUpdateContainer}>
+                    <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+                      <Field label="Supplier" htmlFor="e-sup">
+                        <SelectInput
+                          id="e-sup"
+                          required
+                          value={eSupplier}
+                          onChange={(e) => setESupplier(e.target.value)}
+                        >
+                          {suppliers.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </SelectInput>
+                      </Field>
+                      <Field label="Purchase (optional)" htmlFor="e-pur">
+                        <SelectInput id="e-pur" value={ePurchase} onChange={(e) => setEPurchase(e.target.value)}>
+                          <option value="">None</option>
+                          {purchases.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.supplier?.name} · {formatPhp(p.total)} · {formatDate(p.purchase_date)}
+                            </option>
+                          ))}
+                        </SelectInput>
+                      </Field>
+                    </div>
+                    <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+                      <Field label="Container number" htmlFor="e-number">
+                        <TextInput id="e-number" value={eNumber} onChange={(e) => setENumber(e.target.value)} />
+                      </Field>
+                      <Field label="Supplier reference #" htmlFor="e-ref">
+                        <TextInput id="e-ref" required value={eRef} onChange={(e) => setERef(e.target.value)} />
+                      </Field>
+                    </div>
+                    <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
+                      <Field label="Origin" htmlFor="e-origin">
+                        <TextInput id="e-origin" value={eOrigin} onChange={(e) => setEOrigin(e.target.value)} />
+                      </Field>
+                      <Field label="Expected arrival" htmlFor="e-eta">
+                        <TextInput id="e-eta" type="date" value={eEta} onChange={(e) => setEEta(e.target.value)} />
+                      </Field>
+                      <Field label="Primary branch" htmlFor="e-branch">
+                        <SelectInput id="e-branch" value={eBranch} onChange={(e) => setEBranch(e.target.value)}>
+                          {branches.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.name}
+                            </option>
+                          ))}
+                        </SelectInput>
+                      </Field>
+                    </div>
+                    <Field label="Notes" htmlFor="e-notes">
+                      <TextInput id="e-notes" value={eNotes} onChange={(e) => setENotes(e.target.value)} />
+                    </Field>
+                    <div className="row">
+                      <Button type="submit">Save container</Button>
+                      <Button type="button" variant="secondary" onClick={() => setEditing(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                ) : null}
 
                 <h3 style={{ fontSize: '1rem' }}>Lines (expected vs actual)</h3>
                 <Table>

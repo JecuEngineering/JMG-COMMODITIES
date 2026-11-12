@@ -3,6 +3,7 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextInput } from '../../components/Field'
+import { SkeletonTable } from '../../components/Loading'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches } from '../inventory/inventoryApi'
@@ -298,7 +299,7 @@ export function ReportsPage() {
         </Chip>
       </ChipRow>
 
-      {loading ? <p className="muted">Loading…</p> : null}
+      {loading ? <SkeletonTable rows={5} cols={4} /> : null}
 
       {tab === 'summary' ? (
         <div className="stack">

@@ -4,9 +4,11 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
+import { SkeletonTable } from '../../components/Loading'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate, formatDateTime, todayInputValue } from '../../lib/dates'
+import { downloadCsv } from '../../lib/export'
 import {
   canApproveStockOps,
   canCreateStockOps,
@@ -142,6 +144,21 @@ export function InventoryPage() {
   }, [canView, loadCore])
 
   const lowStock = useMemo(() => balances.filter((r) => r.is_low && r.on_hand >= 0), [balances])
+
+  function exportStock() {
+    downloadCsv(
+      `stock-on-hand-${todayInputValue()}.csv`,
+      ['Branch', 'Variety', 'Sack size (kg)', 'Barcode', 'On hand', 'Status'],
+      balances.map((row) => [
+        row.branch_name,
+        row.variety_name,
+        row.sack_size,
+        row.barcode ?? '',
+        row.on_hand,
+        row.is_low ? 'Low' : 'OK',
+      ]),
+    )
+  }
 
   const cardRunning = useMemo(() => {
     const chronological = [...cardMoves].reverse()
@@ -339,7 +356,7 @@ export function InventoryPage() {
 
       {error ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
-      {loading ? <p className="muted">Loading inventory…</p> : null}
+      {loading ? <SkeletonTable rows={6} cols={5} /> : null}
 
       {tab === 'on_hand' ? (
         <div className="stack">
@@ -374,7 +391,17 @@ export function InventoryPage() {
             </Card>
           ) : null}
 
-          <Card title="Stock on hand" subtitle="Computed from stock_movements">
+          <Card
+            title="Stock on hand"
+            subtitle="Computed from stock_movements"
+            action={
+              balances.length > 0 ? (
+                <Button variant="secondary" onClick={exportStock}>
+                  Export CSV
+                </Button>
+              ) : undefined
+            }
+          >
             {balances.length === 0 ? (
               <div className="empty-state">No SKUs yet. Add products in Phase 2, then post stock in.</div>
             ) : (

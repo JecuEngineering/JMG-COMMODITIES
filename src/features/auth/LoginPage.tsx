@@ -51,6 +51,10 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
+      <Link to="/" className="login-back">
+        <span aria-hidden="true">←</span> Back to website
+      </Link>
+
       {/* Left hero panel */}
       <div className="login-hero">
         <div className="login-hero-bg" />
@@ -117,8 +121,8 @@ export function LoginPage() {
               />
             </Field>
 
-            <Button type="submit" fullWidth disabled={submitting || !configured}>
-              {submitting ? 'Signing in…' : 'Sign in →'}
+            <Button type="submit" fullWidth disabled={!configured} loading={submitting}>
+              Sign in →
             </Button>
           </form>
 

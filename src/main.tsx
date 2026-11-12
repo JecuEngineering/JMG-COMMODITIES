@@ -3,11 +3,13 @@ import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
 import { AuthProvider } from './features/auth/AuthContext'
 import { router } from './app/router'
+import { ClickPulse } from './components/ClickPulse'
 import './styles/global.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider>
+      <ClickPulse />
       <RouterProvider router={router} />
     </AuthProvider>
   </StrictMode>,

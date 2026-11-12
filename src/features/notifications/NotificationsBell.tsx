@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { SkeletonText } from '../../components/Loading'
 import { useAuth } from '../auth/AuthContext'
 import {
   canApproveFundRequest,
@@ -213,7 +214,7 @@ export function NotificationsBell() {
             </button>
           </div>
           {loading ? (
-            <p className="faint" style={{ padding: '12px 16px' }}>Checking…</p>
+            <SkeletonText lines={3} className="sk-notify" />
           ) : alerts.length === 0 ? (
             <p className="faint" style={{ padding: '12px 16px' }}>Nothing needs attention right now.</p>
           ) : (

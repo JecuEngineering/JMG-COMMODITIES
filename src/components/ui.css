@@ -1,5 +1,6 @@
 /* ── Buttons ──────────────────────────────────────────────── */
 .ui-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -11,7 +12,7 @@
   font-weight: 600;
   font-size: 0.925rem;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform var(--motion-fast) var(--ease-out);
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
@@ -22,7 +23,27 @@
 }
 
 .ui-btn:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: translateY(1px) scale(0.97);
+}
+
+.ui-btn-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ui-btn-loading .ui-btn-label {
+  visibility: hidden;
+}
+
+.ui-btn-spinner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: ui-spin 0.7s linear infinite;
 }
 
 .ui-btn-full {
@@ -170,7 +191,11 @@
   font-weight: 600;
   font-size: 0.875rem;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform var(--motion-fast) var(--ease-out);
+}
+
+.ui-chip:active {
+  transform: scale(0.94);
 }
 
 .ui-chip:hover {
@@ -273,9 +298,147 @@
   background: rgba(31, 107, 88, 0.035);
 }
 
+.ui-table tbody tr:active {
+  background: rgba(31, 107, 88, 0.07);
+}
+
 .ui-table tfoot td {
   padding: 13px 16px;
   background: var(--color-surface-raised);
   border-top: 1.5px solid var(--color-border);
   font-weight: 600;
+}
+
+/* ── Loading states ───────────────────────────────────────── */
+@keyframes ui-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes sk-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+.sk {
+  display: block;
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    var(--color-skeleton) 25%,
+    var(--color-skeleton-shine) 37%,
+    var(--color-skeleton) 63%
+  );
+  background-size: 400% 100%;
+  animation: sk-shimmer 1.4s ease-in-out infinite;
+}
+
+.sk-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.sk-line {
+  height: 12px;
+}
+
+.sk-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.sk-table-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sk-table-head {
+  background: var(--color-surface-raised);
+  border-radius: 14px 14px 0 0;
+}
+
+.sk-table-head .sk-cell {
+  height: 9px;
+}
+
+.sk-table-row:last-child {
+  border-bottom: none;
+}
+
+.sk-cell {
+  height: 12px;
+  border-radius: 6px;
+}
+
+.sk-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-jade-muted);
+  border-top-color: var(--color-jade);
+  border-radius: 50%;
+  animation: ui-spin 0.7s linear infinite;
+}
+
+.sk-spinner-lg {
+  width: 38px;
+  height: 38px;
+  border-width: 3px;
+}
+
+.sk-splash {
+  min-height: 60vh;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+}
+
+/* ── Settings switch ─────────────────────────────────────── */
+.settings-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card, 16px);
+  background: var(--color-surface-raised);
+  cursor: pointer;
+}
+
+.settings-switch input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: var(--color-jade);
+  flex-shrink: 0;
+  cursor: inherit;
+}
+
+.settings-switch span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.9rem;
+}
+
+.settings-switch strong {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.settings-switch .faint {
+  font-size: 0.8rem;
+  line-height: 1.45;
 }

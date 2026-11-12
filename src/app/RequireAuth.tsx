@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { Button } from '../components/Button'
+import { SplashLoader } from '../components/Loading'
 import { useAuth } from '../features/auth/AuthContext'
 
 export function RequireAuth() {
@@ -9,7 +10,7 @@ export function RequireAuth() {
   if (loading || profileLoading) {
     return (
       <div className="app-page">
-        <p className="muted">Loading session…</p>
+        <SplashLoader />
       </div>
     )
   }

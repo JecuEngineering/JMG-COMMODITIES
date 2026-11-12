@@ -3,6 +3,7 @@ import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Field, SelectInput, TextInput } from '../../components/Field'
+import { SkeletonTable } from '../../components/Loading'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { canViewAuditLog } from '../../lib/roles'
@@ -169,7 +170,7 @@ export function AuditLogPage() {
 
       <Card title="Entries">
         {loading ? (
-          <p className="faint">Loading…</p>
+          <SkeletonTable rows={6} cols={6} />
         ) : filtered.length === 0 ? (
           <p className="faint">No audit entries match the filters.</p>
         ) : (

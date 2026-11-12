@@ -15,6 +15,8 @@ export interface Branch {
   name: string
   address: string | null
   contact: string | null
+  latitude: number | null
+  longitude: number | null
   active: boolean
   created_at: string
   updated_at: string
@@ -43,6 +45,7 @@ export interface CompanySettings {
   contacts: string | null
   logo_url: string | null
   dr_prefix: string | null
+  show_public_prices: boolean
   updated_at: string
   updated_by: string | null
 }

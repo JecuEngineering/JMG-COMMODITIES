@@ -170,14 +170,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [session])
 
+  // Depend on scalars, not the session object: TOKEN_REFRESHED (fired when a
+  // browser tab regains focus) replaces the session, and a new `user` object
+  // would make every page reload its data and flash a skeleton.
+  const userId = session?.user.id ?? null
+  const userEmail = session?.user.email
   const user = useMemo<SessionUser | null>(() => {
-    if (!session?.user || !profile) return null
+    if (!userId || !profile) return null
     return {
-      id: session.user.id,
-      email: session.user.email,
+      id: userId,
+      email: userEmail,
       profile,
     }
-  }, [session, profile])
+  }, [userId, userEmail, profile])
 
   const value = useMemo(
     () => ({

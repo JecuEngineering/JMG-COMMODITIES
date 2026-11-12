@@ -1,6 +1,26 @@
 # JMG System – Agent Handoff
 
-**Last updated:** 2026-11-11 (required fields, auth/tokens, PLAN Part 2 dashboard/audit/notifications/payables)
+**Last updated:** 2026-11-12 (accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
+
+## Latest pass (2026-11-12): modules + fixes
+
+- **New screens/routes**: `/app/customers` (`CustomersPage`) and `/app/liquidations` (`LiquidationsPage`); nav items added in `src/lib/roles.ts`, icons in `AppShell`, routes in `router.tsx`.
+- **Employees**: edit allowed for owner/GA (migration 014 policy); passwords and login emails are System Admin only via `supabase/functions/admin-update-user`.
+- **Branches**: lat/lng + geocode + link parser + map preview + edit; `public_branches()` returns coordinates.
+- **Containers**: `container_number` column, editable container/supplier form, CSV exports.
+- **Sales**: installment down/parts/first-due-date with live 0%-interest schedule; Sales history with date filters, totals, CSV.
+- **Fund requests**: liquidation UI removed (use `/app/liquidations`); list export added.
+- **Loading**: `AuthContext` memoises `user` on scalar ids so token refresh on tab focus no longer reloads every page.
+- **Migrations to run**: `202611120013_public_site.sql`, `202611120014_branches_containers_accounts.sql`, `202611120015_liquidations.sql`.
+- **Functions to deploy**: `create-employee` (still pending) and `admin-update-user`:
+  `npx supabase functions deploy create-employee --no-verify-jwt --project-ref ylpcutmsolvmloqjnwze`
+  `npx supabase functions deploy admin-update-user --no-verify-jwt --project-ref ylpcutmsolvmloqjnwze`
+
+## Landing page motion (2026-11-12)
+
+- `gsap@3.15.1` + `ScrollTrigger` now drive the public landing page: hero/fleet photo parallax, staggered reveals for section headers, feature/product/branch cards, inquiry/privacy/footer blocks, a top scroll-progress bar and a nav shadow after 16 px. Setup is one `gsap.context` in `LandingPage.tsx` (reverted on unmount) plus a second effect for branch cards that arrive from `public_branches()`. Everything is skipped when `prefers-reduced-motion: reduce`.
+- `/login` has a floating “← Back to website” button; “Staff Login” links play a 240 ms exit animation before routing. Anchor buttons smooth-scroll and pulse the target section heading.
+- If new `.pub-section` blocks are added, mark blocks with `data-reveal` (single) or `data-stagger` (animate children) — no extra JS needed.
 
 ## Status for next agent
 
@@ -16,6 +36,28 @@
 | 8 Fund requests | DONE in code | Migration + FundRequestsPage (full approval flow + liquidation) — run SQL if not yet |
 | 9 Public website | DONE in code | Migration + LandingPage (/) + InquiriesPage (/app/inquiries) — run SQL if not yet |
 | 10 Polish & launch | DONE in code | UI polish: logo favicon + PWA/social meta, refined tokens/components, premium shell, split login with trucks hero, dashboard metric cards, website redesign — `tsc` + `vite build` pass. System Admin is now a superuser in the UI and in RLS (migration 010). |
+
+## Public website pass (2026-11-12)
+
+- Landing page products now use the owner's price list: 8 brand/size items (Mama's Best Myanmar 50/25 kg, Japonica 25 kg, Super Mama 50 kg, Sweet Daisy Myanmar 25 kg, Bambin Myanmar 25 kg, Jasmine Generic 25 kg, Camel India 50 kg) with prices per sack. Hero, nav, fleet section and footer were reworded to match — no more Kasikas/5-variety copy.
+- Inquiry form: honeypot, required DPA consent checkbox, field length limits, trimming, and a 60-second browser cooldown. New `#privacy` notice section. SEO: `robots.txt`, OG/Twitter tags, updated title.
+- **Prices can be hidden**: Settings → Company profile has “Show prices on the public website” (`company_settings.show_public_prices`). The switch only appears after migration 013 is applied.
+- **Branch maps**: branch cards on the landing page embed a Google map that searches the branch's saved **address** (falls back to the name if the address is empty), with an “Open in Google Maps” link. Settings → Branches now hints “use the full street address”; the table has a Map link to check the pin. Entering only “Cebu City” centres the map on the city — enter the street address for an exact pin.
+- **Inquiry email**: `supabase/functions/notify-inquiry` emails staff on each new inquiry via Resend.
+- **Sitemap/canonical**: set `VITE_SITE_URL` in `.env.local` and the Netlify environment; `vite build` then writes `dist/sitemap.xml`, adds `Sitemap:` to `robots.txt`, and injects canonical/og:url/absolute og:image.
+- **Deployment steps still required**:
+  1. Run `supabase/migrations/202611120013_public_site.sql` in the Supabase SQL editor.
+  2. `npx supabase login`, then `npx supabase functions deploy notify-inquiry --no-verify-jwt --project-ref ylpcutmsolvmloqjnwze`.
+  3. Set function secrets: `npx supabase secrets set RESEND_API_KEY=... INQUIRY_NOTIFY_TO=... INQUIRY_NOTIFY_FROM="JMG Website <website@yourdomain>"`.
+  4. Add `VITE_SITE_URL=https://your-live-domain` to the Netlify environment and redeploy.
+- Captcha was deliberately skipped (needs a Turnstile/hCaptcha site key from the owner).
+
+## Motion and loading pass (2026-11-12)
+
+- **Shared loading components** (`src/components/Loading.tsx`): `SkeletonText`, `SkeletonTable`, `SplashLoader`. CSS lives in `components/ui.css` (`.sk*`), colours in `tokens.css` (`--color-skeleton`, `--color-skeleton-shine`).
+- **No more "Loading…" text anywhere**: all page-level loading states are skeleton rows; `RequireAuth` shows a spinner splash; the notification panel shows skeleton lines; button labels swap to an inline spinner via the new `Button loading` prop.
+- **Click animation**: `ClickPulse` in `main.tsx` renders a ripple at every pointer press; press-scale/hover transitions on buttons, chips, nav links, quick links and table rows; page enter animation `.app-page`; pop-in notification panel; slide-in phone drawer. Motion tokens: `--ease-out`, `--motion-fast`, `--motion-base`; all disabled under `prefers-reduced-motion: reduce`.
+- Two planning PDFs were read for direction: `PLAN/JMG Commodities – UI Redesign and Flow Cleanup Plan.pdf` and `PLAN/JMG Commodities System – Full Upgrade Plan (v2).pdf`. Their larger redesigns (U2+ tokens/layout changes, inventory tab restructure, Money out merge) are **not** implemented yet; only the motion/loading items were built.
 
 ## PLAN Part 2 build-out (2026-11-11)
 
@@ -88,7 +130,7 @@ Stock changes **only** via `stock_movements` ledger (RPCs). Money = `numeric(14,
 ## What next agent should do
 
 1. Read this file + `CHANGELOG.md`
-2. Confirm which migrations exist under `supabase/migrations/` (1–12 present; all applied on hosted)
+2. Confirm which migrations exist under `supabase/migrations/` (1–12 applied on hosted; 13–15 pending)
 3. Continue Part 2 gaps: fund-request attachment uploads, container unloading photos, supplier price-increase alerts, per-customer statement of account; then finish the test checklist
 4. After each phase: update `CHANGELOG.md` + this HANDOFF.md
 5. Tell user which SQL files to run in Supabase SQL Editor
@@ -108,6 +150,11 @@ Run in order in Supabase SQL Editor:
 - `202611110010_phase10_system_admin.sql`
 - `202611110011_fix_containers_pcf.sql`
 - `202611110012_fund_request_types.sql`
+- `202611120013_public_site.sql` — **pending** (price toggle column, public branches RPC, inquiry limits)
+- `202611120014_branches_containers_accounts.sql` — **pending** (branch lat/lng, container number, owner/GA profile edits, coordinates in `public_branches()`)
+- `202611120015_liquidations.sql` — **pending** (`liquidations` + `liquidation_items`, RLS incl. System Admin)
+
+014 replaces `public_branches()` (adding latitude/longitude), so run it after 013 and the website will use exact pins once branches have coordinates set in Settings → Branches.
 
 ## Phase 9 build notes
 

@@ -29,6 +29,17 @@ export async function submitInquiry(input: {
     branch_interest: input.branchInterest || null,
   })
   if (error) throw error
+
+  void supabase.functions
+    .invoke('notify-inquiry', {
+      body: {
+        name: input.name,
+        contact: input.contact,
+        message: input.message,
+        branchInterest: input.branchInterest ?? '',
+      },
+    })
+    .catch(() => undefined)
 }
 
 /** Staff: list all inquiries, newest first */

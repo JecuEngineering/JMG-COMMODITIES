@@ -43,6 +43,12 @@
   --shadow-card: 0 4px 16px rgba(24, 35, 30, 0.07), 0 1px 4px rgba(24, 35, 30, 0.05);
   --shadow-elevated: 0 8px 32px rgba(24, 35, 30, 0.12), 0 2px 8px rgba(24, 35, 30, 0.07);
   --touch-min: 48px;
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --color-skeleton: #ece8df;
+  --color-skeleton-shine: #f7f4ed;
   --sidebar-width: 272px;
   --header-height: 64px;
   --bottom-nav-height: 76px;

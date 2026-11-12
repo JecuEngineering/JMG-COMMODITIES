@@ -3,6 +3,7 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
+import { SkeletonTable } from '../../components/Loading'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { useCompanySettings } from '../settings/useCompanySettings'
@@ -566,7 +567,7 @@ export function PcfPage() {
         </Chip>
       </ChipRow>
 
-      {loading ? <p className="muted">Loading…</p> : null}
+      {loading ? <SkeletonTable rows={5} cols={5} /> : null}
 
       {tab === 'funds' ? (
         <div className="stack">
@@ -650,8 +651,8 @@ export function PcfPage() {
                     onChange={(e) => setNewFundNotes(e.target.value)}
                   />
                 </Field>
-                <Button type="submit" disabled={fundSaving}>
-                  {fundSaving ? 'Creating…' : 'Create fund'}
+                <Button type="submit" loading={fundSaving}>
+                  Create fund
                 </Button>
               </form>
             </Card>

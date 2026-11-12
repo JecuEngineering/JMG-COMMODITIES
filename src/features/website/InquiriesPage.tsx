@@ -3,9 +3,11 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, TextArea } from '../../components/Field'
+import { SkeletonTable } from '../../components/Loading'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
-import { formatDate } from '../../lib/dates'
+import { formatDate, todayInputValue } from '../../lib/dates'
+import { downloadCsv } from '../../lib/export'
 import {
   fetchInquiries,
   updateInquiryStatus,
@@ -114,6 +116,22 @@ export function InquiriesPage() {
     { id: 'all', label: `All (${counts.all})` },
   ]
 
+  function exportInquiries() {
+    downloadCsv(
+      `website-inquiries-${todayInputValue()}.csv`,
+      ['Date', 'Name', 'Contact', 'Area of interest', 'Status', 'Message', 'Reply notes'],
+      filtered.map((i) => [
+        i.created_at,
+        i.name,
+        i.contact,
+        i.branch_interest ?? '',
+        STATUS_LABELS[i.status],
+        i.message,
+        i.reply_notes ?? '',
+      ]),
+    )
+  }
+
   return (
     <div className="app-page stack">
       <div className="page-header">
@@ -144,9 +162,18 @@ export function InquiriesPage() {
         ))}
       </ChipRow>
 
-      {loading ? <p className="muted">Loading…</p> : null}
+      {loading && inquiries.length === 0 ? <SkeletonTable rows={4} cols={4} /> : null}
 
-      <Card title={`Inquiries (${filtered.length})`}>
+      <Card
+        title={`Inquiries (${filtered.length})`}
+        action={
+          filtered.length > 0 ? (
+            <Button variant="secondary" onClick={exportInquiries}>
+              Export CSV
+            </Button>
+          ) : undefined
+        }
+      >
         {filtered.length === 0 ? (
           <div className="empty-state">No inquiries in this category.</div>
         ) : (

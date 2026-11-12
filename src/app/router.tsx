@@ -8,6 +8,8 @@ import { InventoryPage } from '../features/inventory/InventoryPage'
 import { ProductsPage } from '../features/products/ProductsPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { SalesPage } from '../features/sales/SalesPage'
+import { CustomersPage } from '../features/customers/CustomersPage'
+import { LiquidationsPage } from '../features/liquidations/LiquidationsPage'
 import { ExpensesPage } from '../features/expenses/ExpensesPage'
 import { ReportsPage } from '../features/reports/ReportsPage'
 import { PcfPage } from '../features/pcf/PcfPage'
@@ -34,11 +36,13 @@ export const router = createBrowserRouter([
           { path: 'products', element: <ProductsPage /> },
           { path: 'me', element: <MePage /> },
           { path: 'sales', element: <SalesPage /> },
+          { path: 'customers', element: <CustomersPage /> },
           { path: 'inventory', element: <InventoryPage /> },
           { path: 'containers', element: <ContainersPage /> },
           { path: 'expenses', element: <ExpensesPage /> },
           { path: 'pcf', element: <PcfPage /> },
           { path: 'fund-requests', element: <FundRequestsPage /> },
+          { path: 'liquidations', element: <LiquidationsPage /> },
           { path: 'reports', element: <ReportsPage /> },
           { path: 'inquiries', element: <InquiriesPage /> },
           { path: 'audit', element: <AuditLogPage /> },

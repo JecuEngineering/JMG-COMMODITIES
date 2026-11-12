@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Field, TextArea, TextInput } from '../../components/Field'
+import { SkeletonText } from '../../components/Loading'
 import { useAuth } from '../auth/AuthContext'
 import { writeAuditLog } from '../../lib/audit'
 import { canManageSettings, canViewSettings } from '../../lib/roles'
@@ -21,6 +22,8 @@ export function SettingsPage() {
   const [tin, setTin] = useState('')
   const [contacts, setContacts] = useState('')
   const [drPrefix, setDrPrefix] = useState('DR')
+  const [showPrices, setShowPrices] = useState(true)
+  const [showPricesSupported, setShowPricesSupported] = useState(false)
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -35,6 +38,9 @@ export function SettingsPage() {
     setContacts(settings.contacts ?? '')
     setDrPrefix(settings.dr_prefix ?? 'DR')
     setLogoUrl(settings.logo_url)
+    const supported = Object.prototype.hasOwnProperty.call(settings, 'show_public_prices')
+    setShowPricesSupported(supported)
+    setShowPrices(supported ? settings.show_public_prices !== false : true)
   }, [settings])
 
   if (!canView) {
@@ -93,7 +99,7 @@ export function SettingsPage() {
     setError(null)
     setMessage(null)
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       name: name.trim(),
       address: address.trim() || null,
       tin: tin.trim() || null,
@@ -102,6 +108,7 @@ export function SettingsPage() {
       updated_by: user!.id,
       updated_at: new Date().toISOString(),
     }
+    if (showPricesSupported) payload.show_public_prices = showPrices
 
     const { error: updateError } = await supabase
       .from('company_settings')
@@ -134,7 +141,7 @@ export function SettingsPage() {
         </div>
       </div>
 
-      {loading ? <p className="muted">Loading settings…</p> : null}
+      {loading ? <SkeletonText lines={6} /> : null}
       {error ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
 
@@ -149,8 +156,13 @@ export function SettingsPage() {
               </div>
             )}
             {canEdit ? (
-              <label className="ui-btn ui-btn-secondary" style={{ cursor: 'pointer' }}>
-                {uploading ? 'Uploading…' : 'Upload logo'}
+              <label
+                className={`ui-btn ui-btn-secondary ${uploading ? 'ui-btn-loading' : ''}`.trim()}
+                style={{ cursor: 'pointer' }}
+                aria-busy={uploading || undefined}
+              >
+                <span className="ui-btn-label">Upload logo</span>
+                {uploading ? <span className="ui-btn-spinner" aria-hidden="true" /> : null}
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/svg+xml,image/webp"
@@ -202,10 +214,27 @@ export function SettingsPage() {
             />
           </Field>
 
+          {showPricesSupported ? (
+            <label className="settings-switch">
+              <input
+                type="checkbox"
+                checked={showPrices}
+                onChange={(e) => setShowPrices(e.target.checked)}
+                disabled={!canEdit}
+              />
+              <span>
+                <strong>Show prices on the public website</strong>
+                <span className="faint">
+                  Turn off to show “Ask for a quote” instead of per-sack prices on the landing page.
+                </span>
+              </span>
+            </label>
+          ) : null}
+
           {canEdit ? (
             <div className="row">
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Saving…' : 'Save settings'}
+              <Button type="submit" loading={saving}>
+                Save settings
               </Button>
             </div>
           ) : null}

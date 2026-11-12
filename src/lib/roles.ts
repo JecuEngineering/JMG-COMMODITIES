@@ -15,11 +15,13 @@ export const ALL_ROLES = Object.keys(ROLE_LABELS) as AppRole[]
 export type NavItemId =
   | 'dashboard'
   | 'sales'
+  | 'customers'
   | 'inventory'
   | 'containers'
   | 'expenses'
   | 'pcf'
   | 'fund_requests'
+  | 'liquidations'
   | 'reports'
   | 'employees'
   | 'products'
@@ -46,10 +48,16 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     id: 'sales',
-    label: 'Sales & Customers',
+    label: 'Sales',
     path: '/app/sales',
     roles: ['owner', 'general_accountant', 'branch_accountant', 'cashier'],
     phoneTab: true,
+  },
+  {
+    id: 'customers',
+    label: 'Customers',
+    path: '/app/customers',
+    roles: ['owner', 'general_accountant', 'branch_accountant', 'cashier'],
   },
   {
     id: 'products',
@@ -88,6 +96,12 @@ export const NAV_ITEMS: NavItem[] = [
     path: '/app/fund-requests',
     roles: ['owner', 'general_accountant', 'branch_accountant', 'warehouse', 'employee'],
     phoneTab: true,
+  },
+  {
+    id: 'liquidations',
+    label: 'Liquidations',
+    path: '/app/liquidations',
+    roles: ['owner', 'general_accountant', 'branch_accountant', 'warehouse', 'employee'],
   },
   {
     id: 'reports',
@@ -141,8 +155,14 @@ function roleIn(role: AppRole, allowed: AppRole[]): boolean {
   return role === 'system_admin' || allowed.includes(role)
 }
 
+/** Creating accounts and changing passwords stays with System Admin. */
 export function canManageEmployees(role: AppRole): boolean {
   return role === 'system_admin'
+}
+
+/** Owners and General Accountants may edit profile details (not credentials). */
+export function canEditEmployees(role: AppRole): boolean {
+  return roleIn(role, ['owner', 'general_accountant'])
 }
 
 export function canViewEmployees(role: AppRole): boolean {
@@ -277,6 +297,24 @@ export function canViewAllBranchesFundRequests(role: AppRole): boolean {
 
 export function canViewFundRequests(role: AppRole): boolean {
   return roleIn(role, ['owner', 'general_accountant', 'branch_accountant', 'employee', 'warehouse'])
+}
+
+// Liquidations
+export function canViewLiquidations(role: AppRole): boolean {
+  return canViewFundRequests(role)
+}
+
+export function canPrepareLiquidation(role: AppRole): boolean {
+  return roleIn(role, ['employee', 'warehouse', 'branch_accountant', 'owner', 'general_accountant'])
+}
+
+// Customers
+export function canViewCustomers(role: AppRole): boolean {
+  return roleIn(role, ['owner', 'general_accountant', 'branch_accountant', 'cashier'])
+}
+
+export function canManageCustomers(role: AppRole): boolean {
+  return roleIn(role, ['owner', 'general_accountant', 'branch_accountant', 'cashier'])
 }
 
 // Website inquiries

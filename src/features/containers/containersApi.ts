@@ -50,6 +50,7 @@ export interface Container {
   id: string
   supplier_id: string
   purchase_id: string | null
+  container_number: string | null
   supplier_ref: string
   origin: string | null
   expected_arrival: string | null
@@ -159,6 +160,7 @@ export async function fetchContainers(): Promise<Container[]> {
 export async function createContainer(input: {
   supplier_id: string
   purchase_id?: string | null
+  container_number?: string
   supplier_ref: string
   origin?: string
   expected_arrival?: string
@@ -171,6 +173,7 @@ export async function createContainer(input: {
     .insert({
       supplier_id: input.supplier_id,
       purchase_id: input.purchase_id || null,
+      container_number: input.container_number?.trim() || null,
       supplier_ref: input.supplier_ref,
       origin: input.origin || null,
       expected_arrival: input.expected_arrival || null,
@@ -192,6 +195,33 @@ export async function createContainer(input: {
   )
   if (linesError) throw linesError
   return container.id as string
+}
+
+export async function updateContainer(input: {
+  id: string
+  supplier_id: string
+  purchase_id?: string | null
+  container_number?: string
+  supplier_ref: string
+  origin?: string
+  expected_arrival?: string
+  primary_branch_id: string
+  notes?: string
+}) {
+  const { error } = await supabase
+    .from('containers')
+    .update({
+      supplier_id: input.supplier_id,
+      purchase_id: input.purchase_id || null,
+      container_number: input.container_number?.trim() || null,
+      supplier_ref: input.supplier_ref,
+      origin: input.origin || null,
+      expected_arrival: input.expected_arrival || null,
+      primary_branch_id: input.primary_branch_id,
+      notes: input.notes || null,
+    })
+    .eq('id', input.id)
+  if (error) throw error
 }
 
 export async function updateContainerStatus(id: string, status: ContainerStatus) {

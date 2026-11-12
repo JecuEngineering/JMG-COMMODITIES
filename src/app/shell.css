@@ -106,6 +106,8 @@
   box-shadow: var(--shadow-elevated);
   z-index: 70;
   overflow: hidden;
+  transform-origin: top right;
+  animation: pop-in 180ms var(--ease-out) both;
 }
 
 .shell-notify-head {
@@ -122,6 +124,10 @@
   flex-direction: column;
   max-height: 60vh;
   overflow-y: auto;
+}
+
+.sk-notify {
+  padding: 14px 16px;
 }
 
 .shell-notify-item {
@@ -299,6 +305,7 @@
   background: rgba(18, 32, 27, 0.42);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
+  animation: fade-in 160ms var(--ease-out) both;
 }
 
 .shell-mobile-menu-panel {
@@ -311,6 +318,7 @@
   background: var(--color-surface);
   box-shadow: var(--shadow-elevated);
   overflow-y: auto;
+  animation: slide-in-right var(--motion-base) var(--ease-out) both;
 }
 
 .shell-mobile-menu-head {

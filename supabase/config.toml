@@ -16,3 +16,9 @@ enabled = true
 # The function validates the caller's JWT and System Admin role itself,
 # so the gateway check is disabled to keep browser CORS preflight working.
 verify_jwt = false
+
+[functions.admin-update-user]
+verify_jwt = false
+
+[functions.notify-inquiry]
+verify_jwt = false

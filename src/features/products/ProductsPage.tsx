@@ -4,9 +4,11 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextInput } from '../../components/Field'
+import { SkeletonTable } from '../../components/Loading'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate, todayInputValue } from '../../lib/dates'
+import { downloadCsv } from '../../lib/export'
 import { formatPhp, parseMoneyInput } from '../../lib/money'
 import { canManagePrices, canManageProducts, canViewProducts } from '../../lib/roles'
 import { supabase } from '../../lib/supabase'
@@ -84,6 +86,23 @@ export function ProductsPage() {
     () => prices.filter((p) => p.sku_id === historySkuId),
     [prices, historySkuId],
   )
+
+  function exportSkus() {
+    downloadCsv(
+      `sku-list-${todayInputValue()}.csv`,
+      ['Variety', 'Sack size (kg)', 'Barcode', 'Current price', 'Effective from'],
+      skusForSelected.map((sku) => {
+        const price = currentPrice(prices, sku.id)
+        return [
+          sku.variety?.name ?? '',
+          sku.sack_size,
+          sku.barcode ?? '',
+          price ? price.price : '',
+          price ? price.effective_from : '',
+        ]
+      }),
+    )
+  }
 
   if (!canView) {
     return (
@@ -186,7 +205,7 @@ export function ProductsPage() {
 
       {error ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
-      {loading ? <p className="muted">Loading products…</p> : null}
+      {loading ? <SkeletonTable rows={4} cols={4} /> : null}
 
       <Card title="Rice varieties" subtitle="Kasikas Jasmine, Japonica, White, Parboiled, Glutinous">
         {canEditProducts ? (
@@ -255,7 +274,17 @@ export function ProductsPage() {
         )}
       </Card>
 
-      <Card title="SKUs (sack sizes)" subtitle="5kg · 25kg · 50kg with optional barcode">
+      <Card
+        title="SKUs (sack sizes)"
+        subtitle="5kg · 25kg · 50kg with optional barcode"
+        action={
+          skusForSelected.length > 0 ? (
+            <Button variant="secondary" onClick={exportSkus}>
+              Export CSV
+            </Button>
+          ) : undefined
+        }
+      >
         {canEditProducts && selectedVarietyId ? (
           <form className="stack" onSubmit={addSku} style={{ marginBottom: 16 }}>
             <Field label="Sack size" htmlFor="sku-size">

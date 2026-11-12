@@ -3,9 +3,11 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
+import { SkeletonTable } from '../../components/Loading'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
-import { formatDate } from '../../lib/dates'
+import { formatDate, todayInputValue } from '../../lib/dates'
+import { downloadCsv } from '../../lib/export'
 import { formatPhp } from '../../lib/money'
 import {
   canApproveFundRequest,
@@ -16,21 +18,17 @@ import {
   canViewFundRequests,
 } from '../../lib/roles'
 import {
-  addLiquidationReceipt,
   approveFundRequest,
   createFundRequest,
   fetchFundRequests,
-  fetchReceipts,
   fetchSteps,
   forwardFundRequest,
-  liquidateFundRequest,
   releaseFundRequest,
   rejectFundRequest,
   submitFundRequest,
   type FundRequest,
   type FundRequestStep,
   type FundRequestType,
-  type LiquidationReceipt,
   type ReleaseMethod,
 } from './fundRequestsApi'
 
@@ -63,7 +61,7 @@ const STATUS_COLORS: Record<FundRequest['status'], string> = {
   rejected: 'var(--color-danger)',
 }
 
-type TabId = 'mine' | 'review' | 'approve' | 'release' | 'liquidation' | 'all'
+type TabId = 'mine' | 'review' | 'approve' | 'release' | 'all'
 
 export function FundRequestsPage() {
   const { user } = useAuth()
@@ -80,7 +78,6 @@ export function FundRequestsPage() {
   const [requests, setRequests] = useState<FundRequest[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [steps, setSteps] = useState<FundRequestStep[]>([])
-  const [receipts, setReceipts] = useState<LiquidationReceipt[]>([])
 
   // create form
   const [fType, setFType] = useState<FundRequestType>('cash_advance')
@@ -94,11 +91,6 @@ export function FundRequestsPage() {
   const [releaseMethod, setReleaseMethod] = useState<ReleaseMethod>('online_transfer')
   const [releaseRef, setReleaseRef] = useState('')
   const [releaseBank, setReleaseBank] = useState('')
-  const [actualSpent, setActualSpent] = useState('')
-  const [returnedAmount, setReturnedAmount] = useState('')
-  const [liquidationNotes, setLiquidationNotes] = useState('')
-  const [receiptDesc, setReceiptDesc] = useState('')
-  const [receiptAmount, setReceiptAmount] = useState('')
 
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -123,9 +115,7 @@ export function FundRequestsPage() {
 
   const loadDetail = useCallback(async (id: string) => {
     try {
-      const [s, r] = await Promise.all([fetchSteps(id), fetchReceipts(id)])
-      setSteps(s)
-      setReceipts(r)
+      setSteps(await fetchSteps(id))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -145,8 +135,6 @@ export function FundRequestsPage() {
         return requests.filter((r) => r.status === 'forwarded')
       case 'release':
         return requests.filter((r) => r.status === 'approved')
-      case 'liquidation':
-        return requests.filter((r) => r.status === 'released' || r.status === 'liquidated')
       case 'all':
         return canViewAll ? requests : requests.filter((r) => r.branch_id === profileBranchId)
       default:
@@ -164,6 +152,25 @@ export function FundRequestsPage() {
 
   const selected = requests.find((r) => r.id === selectedId) ?? null
 
+  function exportRequests() {
+    downloadCsv(
+      `fund-requests-${todayInputValue()}.csv`,
+      ['Date', 'Branch', 'Requester', 'Purpose', 'Category', 'Type', 'Amount', 'Status', 'Released', 'Release ref'],
+      filtered.map((r) => [
+        formatDate(r.created_at),
+        r.branch?.name ?? '',
+        r.requester?.full_name ?? '',
+        r.purpose,
+        r.category ?? '',
+        TYPE_LABELS[r.request_type] ?? r.request_type,
+        r.amount,
+        STATUS_LABELS[r.status],
+        r.released_at ? formatDate(r.released_at) : '',
+        r.release_reference ?? '',
+      ]),
+    )
+  }
+
   function resetForms() {
     setFType('cash_advance')
     setFPurpose('')
@@ -172,11 +179,6 @@ export function FundRequestsPage() {
     setRejectReason('')
     setReleaseRef('')
     setReleaseBank('')
-    setActualSpent('')
-    setReturnedAmount('')
-    setLiquidationNotes('')
-    setReceiptDesc('')
-    setReceiptAmount('')
   }
 
   async function onCreate(event: FormEvent) {
@@ -285,59 +287,11 @@ export function FundRequestsPage() {
     }
   }
 
-  async function onLiquidate(id: string) {
-    setError(null)
-    setMessage(null)
-    if (actualSpent.trim() === '' || !Number.isFinite(Number(actualSpent)) || Number(actualSpent) < 0) {
-      setError('Enter the actual amount spent.')
-      return
-    }
-    if (!Number.isFinite(Number(returnedAmount || 0)) || Number(returnedAmount || 0) < 0) {
-      setError('Returned amount cannot be negative.')
-      return
-    }
-    try {
-      await liquidateFundRequest({
-        id,
-        actualSpent: Number(actualSpent),
-        returnedAmount: Number(returnedAmount || 0),
-        notes: liquidationNotes,
-        liquidatedBy: user!.id,
-      })
-      setMessage('Liquidated.')
-      await load()
-      await loadDetail(id)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
-  async function onAddReceipt(id: string) {
-    if (!receiptDesc.trim() || !receiptAmount) {
-      setError('Please provide description and amount for the receipt.')
-      return
-    }
-    setError(null)
-    try {
-      await addLiquidationReceipt({
-        fundRequestId: id,
-        description: receiptDesc,
-        amount: Number(receiptAmount),
-      })
-      setReceiptDesc('')
-      setReceiptAmount('')
-      await loadDetail(id)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
   const tabs: { id: TabId; label: string; show: boolean }[] = [
     { id: 'mine', label: 'My requests', show: true },
     { id: 'review', label: `For review${canReview ? ` (${requests.filter((r) => r.status === 'submitted').length})` : ''}`, show: canReview },
     { id: 'approve', label: `For approval${canApprove ? ` (${requests.filter((r) => r.status === 'forwarded').length})` : ''}`, show: canApprove },
     { id: 'release', label: `For release${canRelease ? ` (${requests.filter((r) => r.status === 'approved').length})` : ''}`, show: canRelease },
-    { id: 'liquidation', label: `Liquidation (${requests.filter((r) => r.status === 'released').length} open)`, show: true },
     { id: 'all', label: 'All', show: canViewAll || canReview },
   ]
 
@@ -360,13 +314,6 @@ export function FundRequestsPage() {
           </Chip>
         ))}
       </ChipRow>
-
-      {tab === 'liquidation' ? (
-        <p className="muted">
-          Released requests waiting for receipts are listed here. Open a request, add its receipts,
-          then mark it liquidated — cash advances show what was spent and what was returned.
-        </p>
-      ) : null}
 
       {canCreate && tab === 'mine' ? (
         <Card title="New fund request">
@@ -411,9 +358,18 @@ export function FundRequestsPage() {
         </Card>
       ) : null}
 
-      {loading ? <p className="muted">Loading…</p> : null}
+      {loading && requests.length === 0 ? <SkeletonTable rows={5} cols={5} /> : null}
 
-      <Card title={`Requests (${filtered.length})`}>
+      <Card
+        title={`Requests (${filtered.length})`}
+        action={
+          filtered.length > 0 ? (
+            <Button variant="secondary" onClick={exportRequests}>
+              Export CSV
+            </Button>
+          ) : undefined
+        }
+      >
         {filtered.length === 0 ? (
           <div className="empty-state">No requests here.</div>
         ) : (
@@ -575,86 +531,6 @@ export function FundRequestsPage() {
             </div>
           ) : null}
 
-          {selected.status === 'released' && (selected.requester_id === user!.id || ['branch_accountant','owner','general_accountant','system_admin'].includes(role)) ? (
-            <div className="stack" style={{ marginTop: 16 }}>
-              <h3>Liquidation receipts</h3>
-              {receipts.length > 0 ? (
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>Description</th>
-                      <th>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {receipts.map((r) => (
-                      <tr key={r.id}>
-                        <td>{r.description}</td>
-                        <td>{formatPhp(r.amount)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <td><strong>Total</strong></td>
-                      <td><strong>{formatPhp(receipts.reduce((s, r) => s + Number(r.amount), 0))}</strong></td>
-                    </tr>
-                  </tfoot>
-                </Table>
-              ) : (
-                <p className="muted">No receipts yet.</p>
-              )}
-
-              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                <Field label="Receipt description" htmlFor="fr-rdesc">
-                  <TextInput id="fr-rdesc" required value={receiptDesc} onChange={(e) => setReceiptDesc(e.target.value)} />
-                </Field>
-                <Field label="Amount (₱)" htmlFor="fr-ramt">
-                  <TextInput
-                    id="fr-ramt"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    required
-                    value={receiptAmount}
-                    onChange={(e) => setReceiptAmount(e.target.value)}
-                  />
-                </Field>
-                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                  <Button variant="secondary" onClick={() => onAddReceipt(selected.id)}>Add receipt</Button>
-                </div>
-              </div>
-
-              <h3 style={{ marginTop: 16 }}>Liquidate</h3>
-              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                <Field label="Actual spent (₱)" htmlFor="fr-spent">
-                  <TextInput
-                    id="fr-spent"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    required
-                    value={actualSpent}
-                    onChange={(e) => setActualSpent(e.target.value)}
-                  />
-                </Field>
-                <Field label="Returned amount (₱)" htmlFor="fr-returned">
-                  <TextInput
-                    id="fr-returned"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={returnedAmount}
-                    onChange={(e) => setReturnedAmount(e.target.value)}
-                  />
-                </Field>
-              </div>
-              <Field label="Liquidation notes" htmlFor="fr-lnotes">
-                <TextArea id="fr-lnotes" value={liquidationNotes} onChange={(e) => setLiquidationNotes(e.target.value)} />
-              </Field>
-              <Button onClick={() => onLiquidate(selected.id)}>Mark as liquidated</Button>
-            </div>
-          ) : null}
         </Card>
       ) : null}
     </div>

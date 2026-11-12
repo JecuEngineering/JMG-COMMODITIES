@@ -4,11 +4,13 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextInput } from '../../components/Field'
+import { SkeletonTable } from '../../components/Loading'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches, fetchSkus, skuLabel } from '../inventory/inventoryApi'
 import { useCompanySettings } from '../settings/useCompanySettings'
-import { formatDate, formatDateTime, todayInputValue } from '../../lib/dates'
+import { formatDate, formatDateTime, toDateInputValue, todayInputValue } from '../../lib/dates'
+import { downloadCsv } from '../../lib/export'
 import { formatPhp } from '../../lib/money'
 import { canCreateSales, canViewAllBranchesSales, canViewSales } from '../../lib/roles'
 import type { Branch, Sku, Variety } from '../../types/database'
@@ -35,6 +37,13 @@ import './sales.css'
 
 type TabId = 'new' | 'sales' | 'overdue' | 'shifts' | 'receipt'
 
+function addDaysInput(value: string, days: number): string {
+  const d = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return ''
+  d.setDate(d.getDate() + days)
+  return toDateInputValue(d)
+}
+
 export function SalesPage() {
   const { user } = useAuth()
   const { settings } = useCompanySettings()
@@ -54,6 +63,7 @@ export function SalesPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [firstLoad, setFirstLoad] = useState(true)
 
   const [branchId, setBranchId] = useState(profileBranchId ?? '')
   const [customerId, setCustomerId] = useState('')
@@ -65,10 +75,13 @@ export function SalesPage() {
   const [paymentType, setPaymentType] = useState<PaymentMethod>('cash')
   const [downPayment, setDownPayment] = useState('')
   const [parts, setParts] = useState('3')
+  const [firstDueDate, setFirstDueDate] = useState(() => addDaysInput(todayInputValue(), 30))
   const [orNumber, setOrNumber] = useState('')
   const [receiptSale, setReceiptSale] = useState<Sale | null>(null)
   const [customerQuery, setCustomerQuery] = useState('')
   const [salesQuery, setSalesQuery] = useState('')
+  const [historyFrom, setHistoryFrom] = useState('')
+  const [historyTo, setHistoryTo] = useState('')
   const [availableStock, setAvailableStock] = useState<number | null>(null)
 
   const [paySaleId, setPaySaleId] = useState('')
@@ -121,6 +134,7 @@ export function SalesPage() {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
+      setFirstLoad(false)
     }
   }, [profileBranchId, role, user])
 
@@ -185,16 +199,53 @@ export function SalesPage() {
     )
   }, [customers, customerId, customerQuery])
 
+  const installmentPreview = useMemo(() => {
+    if (paymentType !== 'installment') return null
+    const down = Math.max(0, Number(downPayment) || 0)
+    const partCount = Number(parts) || 0
+    const financed = Math.round((total - down) * 100) / 100
+    if (!Number.isInteger(partCount) || partCount < 1 || financed <= 0) return null
+    const first = Math.floor((financed / partCount) * 100) / 100
+    let allocated = 0
+    const rows = Array.from({ length: Math.min(partCount, 60) }, (_, index) => {
+      const sequence = index + 1
+      const amount =
+        sequence === partCount ? Math.round((financed - allocated) * 100) / 100 : first
+      allocated = Math.round((allocated + amount) * 100) / 100
+      return {
+        sequence,
+        dueDate: firstDueDate ? addDaysInput(firstDueDate, index * 30) : '',
+        amount,
+      }
+    })
+    return { down, financed, partCount, rows }
+  }, [paymentType, downPayment, parts, total, firstDueDate])
+
   const filteredSales = useMemo(() => {
     const q = salesQuery.trim().toLowerCase()
-    if (!q) return sales
-    return sales.filter(
-      (s) =>
+    return sales.filter((s) => {
+      if (historyFrom && s.sale_date < historyFrom) return false
+      if (historyTo && s.sale_date > historyTo) return false
+      if (!q) return true
+      return (
         (s.customer?.name ?? '').toLowerCase().includes(q) ||
         (s.dr_number ?? '').toLowerCase().includes(q) ||
-        (s.or_number ?? '').toLowerCase().includes(q),
-    )
-  }, [sales, salesQuery])
+        (s.or_number ?? '').toLowerCase().includes(q)
+      )
+    })
+  }, [sales, salesQuery, historyFrom, historyTo])
+
+  const historyTotals = useMemo(() => {
+    let gross = 0
+    let paid = 0
+    let balance = 0
+    for (const s of filteredSales) {
+      gross += Number(s.total)
+      paid += Number(s.amount_paid)
+      balance += Number(s.balance)
+    }
+    return { gross, paid, balance }
+  }, [filteredSales])
 
   if (!canView) {
     return (
@@ -256,6 +307,14 @@ export function SalesPage() {
         setError('Enter a valid down payment (0 or more).')
         return
       }
+      if (down > total) {
+        setError(`Down payment cannot be more than the sale total (${formatPhp(total)}).`)
+        return
+      }
+      if (!firstDueDate) {
+        setError('Pick the first installment due date.')
+        return
+      }
     }
     let onHand = availableStock
     try {
@@ -286,7 +345,7 @@ export function SalesPage() {
         orNumber: orNumber || undefined,
         downPayment: paymentType === 'installment' ? Number(downPayment || 0) : undefined,
         installmentParts: paymentType === 'installment' ? Number(parts || 1) : undefined,
-        firstDueDate: paymentType === 'installment' ? todayInputValue() : undefined,
+        firstDueDate: paymentType === 'installment' ? firstDueDate : undefined,
       })
       const sale = await fetchSale(id)
       setReceiptSale(sale)
@@ -350,15 +409,44 @@ export function SalesPage() {
     window.print()
   }
 
+  function exportSalesHistory() {
+    downloadCsv(
+      `sales-history-${todayInputValue()}.csv`,
+      [
+        'Date',
+        'DR',
+        'OR',
+        'Customer',
+        'Branch',
+        'Payment type',
+        'Total',
+        'Paid',
+        'Balance',
+      ],
+      filteredSales.map((s) => [
+        s.sale_date,
+        s.dr_number ?? '',
+        s.or_number ?? '',
+        s.customer?.name ?? '',
+        s.branch?.name ?? branches.find((b) => b.id === s.branch_id)?.name ?? '',
+        s.payment_type,
+        s.total,
+        s.amount_paid,
+        s.balance,
+      ]),
+    )
+  }
+
   const branchOptions = canViewAll ? branches : branches.filter((b) => b.id === profileBranchId)
 
   return (
     <div className="app-page stack sales-page">
       <div className="page-header">
         <div>
-          <h1>Sales & Customers</h1>
+          <h1>Sales</h1>
           <p>
-            {branches.find((b) => b.id === branchId)?.name ?? 'Branch'} · phone-first New Sale
+            {branches.find((b) => b.id === branchId)?.name ?? 'Branch'} · new sales, history, installments
+            and shifts
           </p>
         </div>
       </div>
@@ -383,7 +471,7 @@ export function SalesPage() {
 
       {error ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
-      {loading ? <p className="muted">Loading…</p> : null}
+      {loading && firstLoad ? <SkeletonTable rows={5} cols={5} /> : null}
 
       {tab === 'new' ? (
         <Card className="new-sale-card">
@@ -498,9 +586,14 @@ export function SalesPage() {
                   fontWeight: availableStock === 0 ? 600 : undefined,
                 }}
               >
-                {availableStock == null
-                  ? 'Checking available stock…'
-                  : `Available at ${branches.find((b) => b.id === branchId)?.name ?? 'branch'}: ${availableStock} sack(s)`}
+                {availableStock == null ? (
+                  <span className="hint-loading">
+                    <span className="sk-spinner" aria-hidden="true" />
+                    Checking stock
+                  </span>
+                ) : (
+                  `Available at ${branches.find((b) => b.id === branchId)?.name ?? 'branch'}: ${availableStock} sack(s)`
+                )}
               </p>
             ) : null}
 
@@ -525,33 +618,82 @@ export function SalesPage() {
             </div>
 
             {paymentType === 'installment' ? (
-              <div className="row" style={{ alignItems: 'flex-end' }}>
-                <div style={{ flex: 1 }}>
-                  <Field label="Down payment" htmlFor="down">
-                    <TextInput
-                      id="down"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      inputMode="decimal"
-                      value={downPayment}
-                      onChange={(e) => setDownPayment(e.target.value)}
-                    />
-                  </Field>
+              <div className="stack">
+                <div className="row" style={{ alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 140px' }}>
+                    <Field label="Down payment (₱)" htmlFor="down">
+                      <TextInput
+                        id="down"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputMode="decimal"
+                        value={downPayment}
+                        onChange={(e) => setDownPayment(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                  <div style={{ flex: '1 1 100px' }}>
+                    <Field label="Parts" htmlFor="parts">
+                      <TextInput
+                        id="parts"
+                        type="number"
+                        min="1"
+                        step="1"
+                        required
+                        value={parts}
+                        onChange={(e) => setParts(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                  <div style={{ flex: '1 1 160px' }}>
+                    <Field label="First due date" htmlFor="first-due">
+                      <TextInput
+                        id="first-due"
+                        type="date"
+                        required
+                        value={firstDueDate}
+                        onChange={(e) => setFirstDueDate(e.target.value)}
+                      />
+                    </Field>
+                  </div>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <Field label="Parts" htmlFor="parts">
-                    <TextInput
-                      id="parts"
-                      type="number"
-                      min="1"
-                      step="1"
-                      required
-                      value={parts}
-                      onChange={(e) => setParts(e.target.value)}
-                    />
-                  </Field>
-                </div>
+                {installmentPreview ? (
+                  <div className="stack" style={{ gap: 6 }}>
+                    <p className="faint">
+                      {formatPhp(installmentPreview.financed)} financed over {installmentPreview.partCount}{' '}
+                      part(s) · 0% interest, no add-on charges
+                    </p>
+                    <Table>
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Due date</th>
+                          <th>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {installmentPreview.rows.map((row) => (
+                          <tr key={row.sequence}>
+                            <td>{row.sequence}</td>
+                            <td>{row.dueDate ? formatDate(row.dueDate) : '—'}</td>
+                            <td>{formatPhp(row.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                    {installmentPreview.partCount > installmentPreview.rows.length ? (
+                      <p className="faint">
+                        Showing the first {installmentPreview.rows.length} of {installmentPreview.partCount}{' '}
+                        parts.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="faint">
+                    Set a down payment below the total and the number of parts to preview the schedule.
+                  </p>
+                )}
               </div>
             ) : null}
 
@@ -612,57 +754,98 @@ export function SalesPage() {
           </Card>
 
           <Card
-            title="Recent sales"
-            subtitle={
-              salesQuery
-                ? `${filteredSales.length} of ${sales.length} shown`
-                : `${sales.length} sale(s)`
+            title="Sales history"
+            subtitle={`${filteredSales.length} of ${sales.length} sale(s)`}
+            action={
+              filteredSales.length > 0 ? (
+                <Button variant="secondary" onClick={exportSalesHistory}>
+                  Export CSV
+                </Button>
+              ) : undefined
             }
           >
-            <Field label="Filter sales" htmlFor="sales-filter">
-              <TextInput
-                id="sales-filter"
-                value={salesQuery}
-                onChange={(e) => setSalesQuery(e.target.value)}
-                placeholder="Search customer, DR or OR number"
-              />
-            </Field>
-            <Table>
-              <thead>
-                <tr>
-                  <th>DR</th>
-                  <th>Customer</th>
-                  <th>Total</th>
-                  <th>Balance</th>
-                  <th>Type</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSales.map((s) => (
-                  <tr key={s.id}>
-                    <td>{s.dr_number}</td>
-                    <td>{s.customer?.name ?? '—'}</td>
-                    <td>{formatPhp(s.total)}</td>
-                    <td>{formatPhp(s.balance)}</td>
-                    <td>
-                      <Badge>{s.payment_type}</Badge>
-                    </td>
-                    <td>
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          setReceiptSale(s)
-                          setTab('receipt')
-                        }}
-                      >
-                        DR
-                      </Button>
-                    </td>
+            <div className="row" style={{ alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 150px' }}>
+                <Field label="From" htmlFor="sales-from">
+                  <TextInput
+                    id="sales-from"
+                    type="date"
+                    value={historyFrom}
+                    onChange={(e) => setHistoryFrom(e.target.value)}
+                  />
+                </Field>
+              </div>
+              <div style={{ flex: '1 1 150px' }}>
+                <Field label="To" htmlFor="sales-to">
+                  <TextInput
+                    id="sales-to"
+                    type="date"
+                    value={historyTo}
+                    onChange={(e) => setHistoryTo(e.target.value)}
+                  />
+                </Field>
+              </div>
+              <div style={{ flex: '2 1 220px' }}>
+                <Field label="Search" htmlFor="sales-filter">
+                  <TextInput
+                    id="sales-filter"
+                    value={salesQuery}
+                    onChange={(e) => setSalesQuery(e.target.value)}
+                    placeholder="Customer, DR or OR number"
+                  />
+                </Field>
+              </div>
+            </div>
+            <p className="muted" style={{ margin: '4px 0 10px' }}>
+              Gross {formatPhp(historyTotals.gross)} · Collected {formatPhp(historyTotals.paid)} · Balance{' '}
+              {formatPhp(historyTotals.balance)}
+            </p>
+            {filteredSales.length === 0 ? (
+              <div className="empty-state">No sales for this filter.</div>
+            ) : (
+              <Table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>DR</th>
+                    <th>Customer</th>
+                    {canViewAll ? <th>Branch</th> : null}
+                    <th>Total</th>
+                    <th>Balance</th>
+                    <th>Type</th>
+                    <th />
                   </tr>
-                ))}
-              </tbody>
-            </Table>
+                </thead>
+                <tbody>
+                  {filteredSales.map((s) => (
+                    <tr key={s.id}>
+                      <td>{formatDate(s.sale_date)}</td>
+                      <td>{s.dr_number}</td>
+                      <td>{s.customer?.name ?? '—'}</td>
+                      {canViewAll ? (
+                        <td>{s.branch?.name ?? branches.find((b) => b.id === s.branch_id)?.name ?? '—'}</td>
+                      ) : null}
+                      <td>{formatPhp(s.total)}</td>
+                      <td>{formatPhp(s.balance)}</td>
+                      <td>
+                        <Badge>{s.payment_type}</Badge>
+                      </td>
+                      <td>
+                        <Button
+                          variant="ghost"
+                          onClick={() => {
+                            setReceiptSale(s)
+                            setTab('receipt')
+                          }}
+                        >
+                          DR
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
           </Card>
         </div>
       ) : null}
