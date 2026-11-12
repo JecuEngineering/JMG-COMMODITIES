@@ -1,0 +1,18 @@
+project_id = "jmg-commodities"
+
+[api]
+enabled = true
+
+[db]
+port = 54322
+
+[studio]
+enabled = true
+
+[auth]
+enabled = true
+
+[functions.create-employee]
+# The function validates the caller's JWT and System Admin role itself,
+# so the gateway check is disabled to keep browser CORS preflight working.
+verify_jwt = false

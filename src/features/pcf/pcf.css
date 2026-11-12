@@ -1,0 +1,223 @@
+.pcf-sheet {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 28px 32px;
+  color: #1b1b1b;
+  font-size: 0.85rem;
+}
+
+.pcf-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.pcf-sheet-logo {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}
+
+.pcf-sheet-company {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.3;
+}
+
+.pcf-sheet-company strong {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pcf-sheet-company span {
+  font-size: 0.75rem;
+  color: #555;
+}
+
+.pcf-sheet-title {
+  margin: 8px 0 14px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pcf-sheet-sub {
+  margin: -6px 0 14px;
+  text-align: center;
+  font-size: 0.78rem;
+  color: #555;
+  text-transform: uppercase;
+}
+
+.pcf-sheet-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+}
+
+.pcf-sheet-purpose {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 0.8rem;
+}
+
+.pcf-form-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #444;
+  margin-bottom: 14px;
+}
+
+.pcf-form-table th,
+.pcf-form-table td {
+  border: 1px solid #444;
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pcf-form-table th {
+  background: #f3f0e8;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pcf-unit {
+  width: 20%;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.pcf-period {
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+}
+
+.pcf-num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pcf-right {
+  text-align: right;
+}
+
+.pcf-strong {
+  font-weight: 700;
+}
+
+.pcf-red {
+  color: #b3261e;
+}
+
+.pcf-for-request td {
+  border-top: 2px solid #444;
+}
+
+.pcf-record-table td,
+.pcf-record-table th {
+  font-size: 0.72rem;
+}
+
+.pcf-record-table td:nth-child(3) {
+  max-width: 240px;
+  word-break: break-word;
+}
+
+.pcf-signatures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px 24px;
+  margin-top: 26px;
+}
+
+.pcf-signatures div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.72rem;
+}
+
+.pcf-signatures span {
+  color: #555;
+  letter-spacing: 0.04em;
+}
+
+.pcf-signatures strong {
+  border-bottom: 1px solid #444;
+  padding: 18px 4px 3px;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.pcf-signatures em {
+  text-align: center;
+  font-style: normal;
+  font-size: 0.66rem;
+  color: #555;
+  letter-spacing: 0.06em;
+}
+
+@media print {
+  .no-print,
+  .shell-sidebar,
+  .shell-topbar,
+  .shell-bottom-nav,
+  .page-header,
+  .ui-chip-row,
+  .error-banner,
+  .success-banner {
+    display: none !important;
+  }
+
+  .app-page {
+    background: #fff !important;
+  }
+
+  .pcf-sheet {
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    color: #000;
+    font-size: 10pt;
+  }
+
+  .pcf-form-table th {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .pcf-sheet + .pcf-sheet {
+    page-break-before: always;
+  }
+
+  .pcf-form-table {
+    page-break-inside: auto;
+  }
+
+  .pcf-form-table tr {
+    page-break-inside: avoid;
+  }
+}
+
+@page {
+  size: A4 portrait;
+  margin: 12mm;
+}

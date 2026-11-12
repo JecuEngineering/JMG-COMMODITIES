@@ -1,0 +1,187 @@
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr;
+  background: var(--color-bg);
+}
+
+@media (min-width: 768px) {
+  .login-page {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Left: hero panel with JMG trucks background */
+.login-hero {
+  display: none;
+  position: relative;
+  overflow: hidden;
+  background: var(--gradient-hero);
+}
+
+@media (min-width: 768px) {
+  .login-hero {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 48px;
+  }
+}
+
+.login-hero-bg {
+  position: absolute;
+  inset: 0;
+  background-image: url('/JMG TRUCKS.jpg');
+  background-size: cover;
+  background-position: center 30%;
+  opacity: 0.35;
+  mix-blend-mode: luminosity;
+}
+
+.login-hero-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(13, 43, 34, 0.98) 0%,
+    rgba(13, 43, 34, 0.7) 50%,
+    rgba(13, 43, 34, 0.2) 100%
+  );
+}
+
+.login-hero-content {
+  position: relative;
+  z-index: 2;
+  color: var(--color-on-brand);
+}
+
+.login-hero-logo {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  border-radius: 16px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.login-hero-content h2 {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-on-brand);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin-bottom: 12px;
+}
+
+.login-hero-content h2 span {
+  color: var(--color-gold);
+}
+
+.login-hero-content p {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 1rem;
+  line-height: 1.6;
+  max-width: 340px;
+}
+
+.login-hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.login-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.8rem;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+/* Right: form panel */
+.login-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  background: var(--color-surface);
+}
+
+.login-panel-inner {
+  width: min(100%, 400px);
+}
+
+.login-brand {
+  text-align: center;
+  margin-bottom: 36px;
+}
+
+.login-brand h1 {
+  font-size: 1.5rem;
+  margin-top: 16px;
+  letter-spacing: -0.025em;
+}
+
+.login-brand p {
+  color: var(--color-ink-soft);
+  font-size: 0.875rem;
+  margin-top: 4px;
+}
+
+.login-logo {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  margin: 0 auto;
+  border-radius: 20px;
+  box-shadow: 0 4px 20px rgba(31, 107, 88, 0.2);
+}
+
+.login-logo-fallback {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto;
+  border-radius: 20px;
+  background: var(--gradient-brand);
+  color: var(--color-on-brand);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+  box-shadow: 0 4px 20px rgba(31, 107, 88, 0.3);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-divider {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--color-ink-faint);
+  margin: 4px 0;
+}
+
+.login-footer {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--color-ink-faint);
+}
+
+.login-footer a {
+  color: var(--color-jade);
+  font-weight: 500;
+}

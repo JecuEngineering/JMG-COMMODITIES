@@ -1,0 +1,92 @@
+.field-label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.sale-total-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--color-border);
+}
+
+.sale-total-bar strong {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+}
+
+.dr-sheet {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.dr-header {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dr-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
+.dr-meta {
+  text-align: right;
+}
+
+.dr-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+
+.dr-table th,
+.dr-table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 8px 6px;
+  text-align: left;
+}
+
+.dr-total {
+  font-size: 1.1rem;
+}
+
+@media print {
+  .shell-sidebar,
+  .shell-topbar,
+  .shell-bottom-nav,
+  .no-print,
+  .page-header,
+  .ui-chip-row,
+  .error-banner,
+  .success-banner {
+    display: none !important;
+  }
+
+  .shell,
+  .shell-main,
+  .shell-content,
+  .app-page {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #fff !important;
+  }
+
+  .dr-sheet {
+    border: none;
+    border-radius: 0;
+    padding: 0;
+  }
+}
