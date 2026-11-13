@@ -4,6 +4,7 @@ import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
+import { Modal } from '../../components/Modal'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate, todayInputValue } from '../../lib/dates'
@@ -80,6 +81,7 @@ export function FundRequestsPage() {
   const [steps, setSteps] = useState<FundRequestStep[]>([])
 
   // create form
+  const [requestOpen, setRequestOpen] = useState(false)
   const [fType, setFType] = useState<FundRequestType>('cash_advance')
   const [fPurpose, setFPurpose] = useState('')
   const [fCategory, setFCategory] = useState(CATEGORIES[0])
@@ -196,6 +198,7 @@ export function FundRequestsPage() {
         amount: Number(fAmount),
         notes: fNotes,
       })
+      setRequestOpen(false)
       setMessage('Draft created. Submit it when ready.')
       resetForms()
       setSelectedId(req.id)
@@ -302,9 +305,10 @@ export function FundRequestsPage() {
           <h1>Fund Requests</h1>
           <p>Request → BA review → Owner approve → GA release → Liquidation.</p>
         </div>
+        {canCreate ? <Button onClick={() => setRequestOpen(true)}>New request</Button> : null}
       </div>
 
-      {error ? <div className="error-banner">{error}</div> : null}
+      {error && !requestOpen ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
 
       <ChipRow>
@@ -316,8 +320,24 @@ export function FundRequestsPage() {
       </ChipRow>
 
       {canCreate && tab === 'mine' ? (
-        <Card title="New fund request">
-          <form className="stack" onSubmit={onCreate}>
+        <Modal
+          open={requestOpen}
+          onClose={() => setRequestOpen(false)}
+          title="New fund request"
+          subtitle="Saved as a draft — submit it when you are ready for review."
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setRequestOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="fund-request-form">
+                Save draft
+              </Button>
+            </>
+          }
+        >
+          <form id="fund-request-form" className="stack" onSubmit={onCreate}>
+            {error ? <div className="error-banner">{error}</div> : null}
             <Field label="Request type" htmlFor="fr-type">
               <SelectInput
                 id="fr-type"
@@ -353,9 +373,8 @@ export function FundRequestsPage() {
             <Field label="Notes" htmlFor="fr-notes">
               <TextArea id="fr-notes" value={fNotes} onChange={(e) => setFNotes(e.target.value)} />
             </Field>
-            <Button type="submit">Save draft</Button>
           </form>
-        </Card>
+        </Modal>
       ) : null}
 
       {loading && requests.length === 0 ? <SkeletonTable rows={5} cols={5} /> : null}

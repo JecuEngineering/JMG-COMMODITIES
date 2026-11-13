@@ -4,6 +4,7 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Field, SelectInput, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
+import { Modal } from '../../components/Modal'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { writeAuditLog } from '../../lib/audit'
@@ -117,6 +118,12 @@ export function EmployeesPage() {
         <div className="error-banner">You do not have access to employees.</div>
       </div>
     )
+  }
+
+  function closeForm() {
+    setShowForm(false)
+    setEditingId(null)
+    setForm(emptyForm)
   }
 
   function startCreate() {
@@ -288,27 +295,31 @@ export function EmployeesPage() {
             System Admin only.
           </p>
         </div>
-        {canManage ? (
-          <Button
-            onClick={() => {
-              if (showForm && !editingId) {
-                setShowForm(false)
-                return
-              }
-              startCreate()
-            }}
-          >
-            {showForm && !editingId ? 'Close form' : 'Add employee'}
-          </Button>
-        ) : null}
+        {canManage ? <Button onClick={startCreate}>Add employee</Button> : null}
       </div>
 
-      {error ? <div className="error-banner">{error}</div> : null}
+      {error && !showForm ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
 
-      {showForm && canEdit ? (
-        <Card title={editingId ? 'Edit employee' : 'Add employee'}>
-          <form className="stack" onSubmit={onSubmit}>
+      <Modal
+        open={showForm && canEdit}
+        onClose={closeForm}
+        title={editingId ? 'Edit employee' : 'Add employee'}
+        subtitle={editingId ? 'Update this profile and role.' : 'Creates a sign-in account for the employee.'}
+        busy={saving}
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={closeForm}>
+              Cancel
+            </Button>
+            <Button type="submit" form="employee-form" loading={saving}>
+              {editingId ? 'Save changes' : 'Create employee'}
+            </Button>
+          </>
+        }
+      >
+          <form id="employee-form" className="stack" onSubmit={onSubmit}>
+            {error ? <div className="error-banner">{error}</div> : null}
             <Field label="Full name" htmlFor="emp-name">
               <TextInput
                 id="emp-name"
@@ -415,24 +426,8 @@ export function EmployeesPage() {
                 </SelectInput>
               </Field>
             ) : null}
-            <div className="row">
-              <Button type="submit" loading={saving}>
-                {editingId ? 'Save changes' : 'Create employee'}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setShowForm(false)
-                  setEditingId(null)
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
           </form>
-        </Card>
-      ) : null}
+      </Modal>
 
       <Card title="Directory" subtitle={loading ? undefined : `${employees.length} people`}>
         {loading ? (

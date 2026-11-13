@@ -4,6 +4,7 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
+import { Modal } from '../../components/Modal'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches } from '../inventory/inventoryApi'
@@ -104,6 +105,12 @@ export function CustomersPage() {
         <div className="error-banner">You do not have access to customers.</div>
       </div>
     )
+  }
+
+  function closeForm() {
+    setEditingId(null)
+    setShowForm(false)
+    setForm(emptyForm)
   }
 
   function startCreate() {
@@ -213,20 +220,16 @@ export function CustomersPage() {
         {canManage ? (
           <Button
             onClick={() => {
-              if (showForm) {
-                setShowForm(false)
-                return
-              }
               setSelectedId(null)
               startCreate()
             }}
           >
-            {showForm ? 'Close form' : 'Add customer'}
+            Add customer
           </Button>
         ) : null}
       </div>
 
-      {error ? <div className="error-banner">{error}</div> : null}
+      {error && !showForm ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
 
       {canViewAll ? (
@@ -274,9 +277,31 @@ export function CustomersPage() {
         </div>
       </Card>
 
-      {showForm && canManage ? (
-        <Card title={editingId ? 'Edit customer' : 'New customer'}>
-          <form className="stack" onSubmit={onSubmit}>
+      <Modal
+        open={showForm && canManage}
+        onClose={closeForm}
+        title={editingId ? 'Edit customer' : 'New customer'}
+        subtitle={
+          editingId
+            ? 'Update the customer record.'
+            : canViewAll
+              ? 'Saved to the branch selected above.'
+              : 'Saved to your branch.'
+        }
+        busy={saving}
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={closeForm}>
+              Cancel
+            </Button>
+            <Button type="submit" form="customer-form" loading={saving}>
+              {editingId ? 'Save changes' : 'Add customer'}
+            </Button>
+          </>
+        }
+      >
+        <form id="customer-form" className="stack" onSubmit={onSubmit}>
+            {error ? <div className="error-banner">{error}</div> : null}
             <Field label="Name" htmlFor="cust-name">
               <TextInput
                 id="cust-name"
@@ -318,25 +343,8 @@ export function CustomersPage() {
                 </SelectInput>
               </Field>
             ) : null}
-            <div className="row">
-              <Button type="submit" loading={saving}>
-                {editingId ? 'Save changes' : 'Add customer'}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setEditingId(null)
-                  setShowForm(false)
-                  setForm(emptyForm)
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </Card>
-      ) : null}
+        </form>
+      </Modal>
 
       <Card
         title="Customer list"

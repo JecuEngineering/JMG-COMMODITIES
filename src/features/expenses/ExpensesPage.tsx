@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
+import { Modal } from '../../components/Modal'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches } from '../inventory/inventoryApi'
@@ -56,6 +57,7 @@ export function ExpensesPage() {
   const [filterCategoryId, setFilterCategoryId] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
 
   const load = useCallback(async () => {
     setError(null)
@@ -143,6 +145,7 @@ export function ExpensesPage() {
         created_by: user!.id,
       })
       if (insErr) throw insErr
+      setFormOpen(false)
       setMessage('Expense saved.')
       setAmount('')
       setPayee('')
@@ -191,14 +194,31 @@ export function ExpensesPage() {
           <h1>Expenses</h1>
           <p>Categories, amounts, and optional receipt photos.</p>
         </div>
+        {canManage ? <Button onClick={() => setFormOpen(true)}>Add expense</Button> : null}
       </div>
 
-      {error ? <div className="error-banner">{error}</div> : null}
+      {error && !formOpen ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
 
-      {canManage ? (
-        <Card title="Encode expense" className="no-print">
-          <form className="stack" onSubmit={onSubmit}>
+      <Modal
+        open={formOpen && canManage}
+        onClose={() => setFormOpen(false)}
+        title="Encode expense"
+        subtitle="Record a branch expense and attach the receipt."
+        busy={false}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setFormOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="expense-form">
+              Save expense
+            </Button>
+          </>
+        }
+      >
+          <form id="expense-form" className="stack" onSubmit={onSubmit}>
+            {error ? <div className="error-banner">{error}</div> : null}
             <Field label="Branch" htmlFor="ex-branch">
               <SelectInput id="ex-branch" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
                 {branchOptions.map((b) => (
@@ -241,10 +261,8 @@ export function ExpensesPage() {
             <Field label="Receipt photo" htmlFor="ex-file">
               <input id="ex-file" type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
             </Field>
-            <Button type="submit">Save expense</Button>
           </form>
-        </Card>
-      ) : null}
+      </Modal>
 
       <Card title="Filters" className="no-print">
         <div className="row" style={{ flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>

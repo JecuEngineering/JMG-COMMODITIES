@@ -3,6 +3,7 @@ import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Field, TextInput } from '../../components/Field'
+import { Modal } from '../../components/Modal'
 import { Table } from '../../components/Table'
 import { writeAuditLog } from '../../lib/audit'
 import { canManageSettings } from '../../lib/roles'
@@ -69,6 +70,7 @@ export function BranchesPanel() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [showForm, setShowForm] = useState(false)
 
   const load = useCallback(async () => {
     const { data, error: fetchError } = await supabase
@@ -105,6 +107,15 @@ export function BranchesPanel() {
     setMapNote(null)
     setError(null)
     setMessage(null)
+    setShowForm(true)
+  }
+
+  function closeForm() {
+    setEditingId(null)
+    setForm(emptyForm)
+    setPinInput('')
+    setMapNote(null)
+    setShowForm(false)
   }
 
   function startEdit(branch: Branch) {
@@ -121,6 +132,7 @@ export function BranchesPanel() {
     setMapNote(null)
     setError(null)
     setMessage(null)
+    setShowForm(true)
   }
 
   function applyPinInput(value: string) {
@@ -218,6 +230,7 @@ export function BranchesPanel() {
       setForm(emptyForm)
       setPinInput('')
       setMapNote(null)
+      setShowForm(false)
       await load()
       return
     }
@@ -241,6 +254,7 @@ export function BranchesPanel() {
     setForm(emptyForm)
     setPinInput('')
     setMapNote(null)
+    setShowForm(false)
     setMessage('Branch added.')
     await load()
   }
@@ -267,12 +281,34 @@ export function BranchesPanel() {
   }
 
   return (
-    <Card title="Branches" subtitle={canEdit ? 'Owner and System Admin can add branches' : 'View only'}>
-      {error ? <div className="error-banner" style={{ marginBottom: 12 }}>{error}</div> : null}
+    <>
+    <Card
+      title="Branches"
+      subtitle={canEdit ? 'Owner and System Admin can add branches' : 'View only'}
+      action={canEdit ? <Button onClick={startCreate}>Add branch</Button> : null}
+    >
+      {error && !showForm ? <div className="error-banner" style={{ marginBottom: 12 }}>{error}</div> : null}
       {message ? <div className="success-banner" style={{ marginBottom: 12 }}>{message}</div> : null}
 
-      {canEdit ? (
-        <form className="stack" onSubmit={onSubmit} style={{ marginBottom: 16 }}>
+      <Modal
+        open={showForm && canEdit}
+        onClose={closeForm}
+        title={editingId ? 'Edit branch' : 'New branch'}
+        subtitle="Set the address, then drop the pin so the website map points at the right spot."
+        busy={saving}
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={closeForm}>
+              Cancel
+            </Button>
+            <Button type="submit" form="branch-form" loading={saving}>
+              {editingId ? 'Save branch' : 'Add branch'}
+            </Button>
+          </>
+        }
+      >
+        <form id="branch-form" className="stack" onSubmit={onSubmit}>
+          {error ? <div className="error-banner">{error}</div> : null}
           <Field label="Branch name" htmlFor="branch-name">
             <TextInput
               id="branch-name"
@@ -355,18 +391,8 @@ export function BranchesPanel() {
             ) : null}
           </div>
 
-          <div className="row">
-            <Button type="submit" loading={saving}>
-              {editingId ? 'Save branch' : 'Add branch'}
-            </Button>
-            {editingId ? (
-              <Button type="button" variant="secondary" onClick={startCreate}>
-                Cancel edit
-              </Button>
-            ) : null}
-          </div>
         </form>
-      ) : null}
+      </Modal>
 
       {branches.length === 0 ? (
         <div className="empty-state">No branches yet.</div>
@@ -421,5 +447,6 @@ export function BranchesPanel() {
         </Table>
       )}
     </Card>
+    </>
   )
 }

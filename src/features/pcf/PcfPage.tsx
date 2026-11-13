@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
-import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
+import { Modal } from '../../components/Modal'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { useCompanySettings } from '../settings/useCompanySettings'
@@ -31,6 +31,15 @@ import './pcf.css'
 const PCF_CATEGORIES = ['Supplies', 'Transportation', 'Repairs', 'Utilities', 'Food', 'Other']
 
 type TabId = 'funds' | 'vouchers' | 'replenish' | 'request' | 'record' | 'report'
+
+const TABS: { id: TabId; label: string; needs?: 'replenish' | 'request' }[] = [
+  { id: 'funds', label: 'Funds' },
+  { id: 'vouchers', label: 'Vouchers' },
+  { id: 'replenish', label: 'Replenishments', needs: 'replenish' },
+  { id: 'request', label: 'Request for fund', needs: 'request' },
+  { id: 'record', label: 'Record' },
+  { id: 'report', label: 'Report' },
+]
 
 function pad(n: number) {
   return String(n).padStart(2, '0')
@@ -94,9 +103,13 @@ export function PcfPage() {
   const [vDate, setVDate] = useState(todayInputValue())
   const [vPayee, setVPayee] = useState('')
   const [vPurpose, setVPurpose] = useState('')
+  const [fundOpen, setFundOpen] = useState(false)
+  const [voucherOpen, setVoucherOpen] = useState(false)
+  const [replenishOpen, setReplenishOpen] = useState(false)
   const [vCategory, setVCategory] = useState(PCF_CATEGORIES[0])
   const [vAmount, setVAmount] = useState('')
   const [vFile, setVFile] = useState<File | null>(null)
+  const [voucherSearch, setVoucherSearch] = useState('')
 
   // Replenishment form
   const [rAmount, setRAmount] = useState('')
@@ -297,6 +310,17 @@ export function PcfPage() {
     return { expense, replenishment, opening, closing: opening - expense + replenishment }
   }, [recordEntries, selectedFund])
 
+  const voucherNumbers = useMemo(() => {
+    const sorted = vouchers
+      .slice()
+      .sort((a, b) => a.voucher_date.localeCompare(b.voucher_date) || a.created_at.localeCompare(b.created_at))
+    const map = new Map<string, string>()
+    sorted.forEach((voucher, index) => {
+      map.set(voucher.id, `PCF-${String(index + 1).padStart(4, '0')}`)
+    })
+    return map
+  }, [vouchers])
+
   if (!canView) {
     return (
       <div className="app-page">
@@ -340,6 +364,7 @@ export function PcfPage() {
         receiptPath,
         createdBy: user!.id,
       })
+      setVoucherOpen(false)
       setMessage('Voucher saved.')
       setVPayee('')
       setVPurpose('')
@@ -373,6 +398,7 @@ export function PcfPage() {
         notes: rNotes,
         releasedBy: user!.id,
       })
+      setReplenishOpen(false)
       setMessage('Replenishment recorded.')
       setRAmount('')
       setRRef('')
@@ -410,6 +436,7 @@ export function PcfPage() {
         lowThreshold: Number(newFundThreshold),
         notes: newFundNotes,
       })
+      setFundOpen(false)
       setMessage('Petty cash fund created.')
       setNewFundAmount('')
       setNewFundNotes('')
@@ -423,6 +450,29 @@ export function PcfPage() {
   }
 
   const lowFunds = visibleFunds.filter((f) => f.is_low)
+
+  const unrecoveredTotal = unrecovered.reduce((sum, v) => sum + Number(v.amount), 0)
+  const unrecoveredIds = new Set(unrecovered.map((v) => v.id))
+  const fundAmount = Number(selectedFund?.fund_amount ?? 0)
+  const meterPercent = fundAmount > 0 ? Math.min(100, Math.max(0, (Number(selectedFund?.balance ?? 0) / fundAmount) * 100)) : 0
+  const markerPercent = fundAmount > 0 ? Math.min(100, Math.max(0, (Number(selectedFund?.low_threshold ?? 0) / fundAmount) * 100)) : 0
+  const searchTerm = voucherSearch.trim().toLowerCase()
+  const recentVouchers = vouchers.filter(
+    (v) =>
+      !searchTerm ||
+      v.payee.toLowerCase().includes(searchTerm) ||
+      (v.purpose ?? '').toLowerCase().includes(searchTerm),
+  )
+
+  function openReplenish() {
+    setRAmount(unrecoveredTotal > 0 ? String(unrecoveredTotal) : '')
+    setReplenishOpen(true)
+  }
+
+  function onPrintReport() {
+    setTab('report')
+    window.setTimeout(() => printPage(), 120)
+  }
 
   const branchLabel = selectedFund?.branch?.name ?? selectedFund?.branch_id ?? 'PCF'
   const companyName = settings?.name ?? 'JMG Commodities Inc.'
@@ -510,8 +560,30 @@ export function PcfPage() {
     <div className="app-page stack">
       <div className="page-header">
         <div>
-          <h1>Petty Cash Fund</h1>
-          <p>Per-branch PCF, vouchers with receipts, replenishments, and printable report.</p>
+          <h1>Petty cash</h1>
+          <p>{branchLabel}</p>
+        </div>
+        <div className="pcf-toolbar no-print">
+          {visibleFunds.length > 1 ? (
+            <SelectInput
+              className="pcf-fund-pick"
+              value={selectedFundId}
+              onChange={(e) => setSelectedFundId(e.target.value)}
+              aria-label="Branch fund"
+            >
+              {visibleFunds.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.branch?.name ?? f.branch_id}
+                </option>
+              ))}
+            </SelectInput>
+          ) : null}
+          <Button variant="secondary" onClick={onPrintReport}>
+            Print report
+          </Button>
+          {canManage && selectedFund ? (
+            <Button onClick={() => setVoucherOpen(true)}>New money out</Button>
+          ) : null}
         </div>
       </div>
 
@@ -524,88 +596,176 @@ export function PcfPage() {
         </div>
       ) : null}
 
-      {visibleFunds.length > 1 ? (
-        <div className="no-print">
-          <Field label="Branch fund" htmlFor="pcf-fund">
-            <SelectInput
-              id="pcf-fund"
-              value={selectedFundId}
-              onChange={(e) => setSelectedFundId(e.target.value)}
-            >
-              {visibleFunds.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.branch?.name ?? f.branch_id}
-                </option>
-              ))}
-            </SelectInput>
-          </Field>
-        </div>
-      ) : null}
-
-      <ChipRow>
-        <Chip active={tab === 'funds'} onClick={() => setTab('funds')}>
-          Funds
-        </Chip>
-        <Chip active={tab === 'vouchers'} onClick={() => setTab('vouchers')}>
-          Vouchers
-        </Chip>
-        {canReplenish ? (
-          <Chip active={tab === 'replenish'} onClick={() => setTab('replenish')}>
-            Replenish
-          </Chip>
-        ) : null}
-        {canRequest ? (
-          <Chip active={tab === 'request'} onClick={() => setTab('request')}>
-            Request for fund
-          </Chip>
-        ) : null}
-        <Chip active={tab === 'record'} onClick={() => setTab('record')}>
-          Record
-        </Chip>
-        <Chip active={tab === 'report'} onClick={() => setTab('report')}>
-          Report
-        </Chip>
-      </ChipRow>
+      <div className="pcf-tabs no-print" role="tablist">
+        {TABS.filter((item) =>
+          item.needs === 'replenish' ? canReplenish : item.needs === 'request' ? canRequest : true,
+        ).map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            className={`pcf-tab${tab === item.id ? ' is-active' : ''}`}
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
 
       {loading ? <SkeletonTable rows={5} cols={5} /> : null}
 
       {tab === 'funds' ? (
         <div className="stack">
-          <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
-            {visibleFunds.length === 0 ? (
-              <Card title="No PCF fund">
-                <p className="muted">No petty cash fund is set up for your branch yet.</p>
-              </Card>
-            ) : (
-              visibleFunds.map((f) => (
-                <Card
-                  key={f.id}
-                  title={f.branch?.name ?? 'PCF'}
-                  subtitle={f.is_low ? '⚠ Low fund' : 'OK'}
-                >
-                  <div className="stack" style={{ gap: 4 }}>
-                    <p className="muted">Opening fund</p>
-                    <strong style={{ fontSize: 20 }}>{formatPhp(f.fund_amount)}</strong>
-                    <p className="muted" style={{ marginTop: 8 }}>Current balance</p>
-                    <strong style={{ fontSize: 24, color: f.is_low ? 'var(--color-danger)' : 'var(--color-jade)' }}>
-                      {formatPhp(f.balance)}
-                    </strong>
-                    <p className="faint">
-                      Vouchers: {formatPhp(f.vouchers_total)} · Replenishments: {formatPhp(f.replenishments_total)}
-                    </p>
-                    <p className="faint">Low threshold: {formatPhp(f.low_threshold)}</p>
-                  </div>
-                </Card>
-              ))
-            )}
-          </div>
+          {selectedFund ? (
+            <>
+              <div className="pcf-funds">
+                <section className="pcf-fund-card">
+                  <header className="pcf-fund-head">
+                    <div>
+                      <span className="pcf-eyebrow">Branch fund</span>
+                      <h2>{selectedFund.branch?.name ?? selectedFund.branch_id}</h2>
+                    </div>
+                    <span className={`pcf-fund-badge${selectedFund.is_low ? ' is-low' : ''}`}>
+                      {selectedFund.is_low ? 'Low' : 'OK'}
+                    </span>
+                  </header>
 
+                  <p className="pcf-fund-balance">
+                    {formatPhp(selectedFund.balance)}
+                    <span className="pcf-fund-of">of {formatPhp(selectedFund.fund_amount)} fund</span>
+                  </p>
+
+                  <div className="pcf-meter" aria-hidden="true">
+                    <span
+                      className={`pcf-meter-fill${selectedFund.is_low ? ' is-low' : ''}`}
+                      style={{ width: `${meterPercent}%` }}
+                    />
+                    <span className="pcf-meter-marker" style={{ left: `${markerPercent}%` }} />
+                  </div>
+
+                  <div className="pcf-fund-meta">
+                    <span>
+                      Vouchers {formatPhp(selectedFund.vouchers_total)} · Replenished{' '}
+                      {formatPhp(selectedFund.replenishments_total)}
+                    </span>
+                    <span>Low at {formatPhp(selectedFund.low_threshold)}</span>
+                  </div>
+
+                  <p className="pcf-fund-custodian">
+                    Custodian: {selectedFund.custodian?.full_name ?? 'Unassigned'}
+                  </p>
+
+                  {canManage && availableBranches.length > 0 ? (
+                    <div className="pcf-fund-actions">
+                      <Button variant="ghost" onClick={() => setFundOpen(true)}>
+                        Set up another fund
+                      </Button>
+                    </div>
+                  ) : null}
+                </section>
+
+                <section className="pcf-ready-card">
+                  <span className="pcf-eyebrow">Ready to replenish</span>
+                  <p className="pcf-ready-total">{formatPhp(unrecoveredTotal)}</p>
+                  <p className="pcf-ready-sub">
+                    {unrecovered.length} unrecovered voucher{unrecovered.length === 1 ? '' : 's'}
+                  </p>
+                  <p className="pcf-ready-explain">
+                    Vouchers logged after the last replenishment. Request this amount to bring the
+                    fund back to {formatPhp(selectedFund.fund_amount)}.
+                  </p>
+                  {canReplenish ? (
+                    <Button onClick={openReplenish} disabled={unrecovered.length === 0}>
+                      Request replenishment
+                    </Button>
+                  ) : canRequest ? (
+                    <Button variant="secondary" onClick={() => setTab('request')}>
+                      Prepare request
+                    </Button>
+                  ) : (
+                    <p className="faint">The branch accountant or Owner records replenishments.</p>
+                  )}
+                </section>
+              </div>
+
+              <Card title="Recent vouchers">
+                <div className="pcf-voucher-search">
+                  <TextInput
+                    type="search"
+                    placeholder="Search payee or purpose"
+                    value={voucherSearch}
+                    onChange={(e) => setVoucherSearch(e.target.value)}
+                    aria-label="Search vouchers"
+                  />
+                </div>
+                {recentVouchers.length === 0 ? (
+                  <div className="empty-state">
+                    {vouchers.length === 0 ? 'No vouchers yet.' : 'No vouchers match your search.'}
+                  </div>
+                ) : (
+                  <Table>
+                    <thead>
+                      <tr>
+                        <th>Voucher</th>
+                        <th>Date</th>
+                        <th>Payee</th>
+                        <th>Purpose</th>
+                        <th>Category</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentVouchers.slice(0, 8).map((v) => (
+                        <tr key={v.id}>
+                          <td className="pcf-cell-ref">{voucherNumbers.get(v.id)}</td>
+                          <td>{formatDate(v.voucher_date)}</td>
+                          <td className="pcf-cell-primary">{v.payee}</td>
+                          <td>{v.purpose ?? '—'}</td>
+                          <td>{v.category ?? '—'}</td>
+                          <td className="pcf-cell-amount">{formatPhp(v.amount)}</td>
+                          <td>
+                            <span className={`pcf-status${unrecoveredIds.has(v.id) ? ' is-pending' : ''}`}>
+                              {unrecoveredIds.has(v.id) ? 'Not replenished' : 'Replenished'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                )}
+              </Card>
+            </>
+          ) : (
+            <Card title="No PCF fund">
+              <p className="muted">No petty cash fund is set up for your branch yet.</p>
+              {canManage && availableBranches.length > 0 ? (
+                <div className="pcf-fund-actions">
+                  <Button onClick={() => setFundOpen(true)}>Set up fund</Button>
+                </div>
+              ) : null}
+            </Card>
+          )}
           {canManage && availableBranches.length > 0 ? (
-            <Card
+            <Modal
+              open={fundOpen}
+              onClose={() => setFundOpen(false)}
               title="Set up petty cash fund"
-              subtitle="One opening fund per branch — branch accountants can set up their own branch"
+              subtitle="One opening fund per branch."
+              size="sm"
+              footer={
+                <>
+                  <Button variant="secondary" onClick={() => setFundOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" form="pcf-fund-form" loading={fundSaving}>
+                    Create fund
+                  </Button>
+                </>
+              }
             >
-              <form className="stack" onSubmit={onCreateFund}>
+              <form id="pcf-fund-form" className="stack" onSubmit={onCreateFund}>
                 <Field label="Branch" htmlFor="pcf-new-branch">
                   <SelectInput
                     id="pcf-new-branch"
@@ -651,63 +811,20 @@ export function PcfPage() {
                     onChange={(e) => setNewFundNotes(e.target.value)}
                   />
                 </Field>
-                <Button type="submit" loading={fundSaving}>
-                  Create fund
-                </Button>
               </form>
-            </Card>
+            </Modal>
           ) : null}
         </div>
       ) : null}
 
       {tab === 'vouchers' ? (
         <div className="stack">
-          {canManage && selectedFund ? (
-            <Card title="New voucher">
-              <form className="stack" onSubmit={onVoucherSubmit}>
-                <Field label="Date" htmlFor="pcf-v-date">
-                  <TextInput id="pcf-v-date" type="date" required value={vDate} onChange={(e) => setVDate(e.target.value)} />
-                </Field>
-                <Field label="Payee" htmlFor="pcf-v-payee">
-                  <TextInput id="pcf-v-payee" required value={vPayee} onChange={(e) => setVPayee(e.target.value)} />
-                </Field>
-                <Field label="Category" htmlFor="pcf-v-cat">
-                  <SelectInput id="pcf-v-cat" value={vCategory} onChange={(e) => setVCategory(e.target.value)}>
-                    {PCF_CATEGORIES.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </SelectInput>
-                </Field>
-                <Field label="Purpose" htmlFor="pcf-v-purpose">
-                  <TextInput id="pcf-v-purpose" value={vPurpose} onChange={(e) => setVPurpose(e.target.value)} />
-                </Field>
-                <Field label="Amount (₱)" htmlFor="pcf-v-amt">
-                  <TextInput
-                    id="pcf-v-amt"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    required
-                    value={vAmount}
-                    onChange={(e) => setVAmount(e.target.value)}
-                  />
-                </Field>
-                <Field label="Receipt photo" htmlFor="pcf-v-file">
-                  <input
-                    id="pcf-v-file"
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setVFile(e.target.files?.[0] ?? null)}
-                  />
-                </Field>
-                <Button type="submit">Save voucher</Button>
-              </form>
-            </Card>
-          ) : null}
-
-          <Card title={`Vouchers (${vouchers.length})`}>
+          <Card
+            title={`Vouchers (${vouchers.length})`}
+            action={
+              canManage && selectedFund ? <Button onClick={() => setVoucherOpen(true)}>New voucher</Button> : null
+            }
+          >
             {vouchers.length === 0 ? (
               <div className="empty-state">No vouchers yet.</div>
             ) : (
@@ -740,38 +857,10 @@ export function PcfPage() {
 
       {tab === 'replenish' && canReplenish ? (
         <div className="stack">
-          {selectedFund ? (
-            <Card title={`Replenish fund — ${selectedFund.branch?.name ?? selectedFund.branch_id}`}>
-              <p className="muted">
-                Unrecovered vouchers: <strong>{unrecovered.length}</strong> totaling{' '}
-                <strong>{formatPhp(unrecovered.reduce((s, v) => s + Number(v.amount), 0))}</strong>
-              </p>
-              <form className="stack" onSubmit={onReplenishSubmit}>
-                <Field label="Amount (₱)" htmlFor="pcf-r-amt">
-                  <TextInput
-                    id="pcf-r-amt"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    required
-                    value={rAmount}
-                    onChange={(e) => setRAmount(e.target.value)}
-                  />
-                </Field>
-                <Field label="Reference no." htmlFor="pcf-r-ref">
-                  <TextInput id="pcf-r-ref" required value={rRef} onChange={(e) => setRRef(e.target.value)} />
-                </Field>
-                <Field label="Notes" htmlFor="pcf-r-notes">
-                  <TextArea id="pcf-r-notes" value={rNotes} onChange={(e) => setRNotes(e.target.value)} />
-                </Field>
-                <Button type="submit">
-                  Record replenishment
-                </Button>
-              </form>
-            </Card>
-          ) : null}
-
-          <Card title={`Replenishment history (${replenishments.length})`}>
+          <Card
+            title={`Replenishment history (${replenishments.length})`}
+            action={selectedFund ? <Button onClick={openReplenish}>Replenish</Button> : null}
+          >
             {replenishments.length === 0 ? (
               <div className="empty-state">No replenishments yet.</div>
             ) : (
@@ -1246,6 +1335,106 @@ export function PcfPage() {
             </Button>
           </div>
         </div>
+      ) : null}
+
+      {canManage && selectedFund ? (
+        <Modal
+          open={voucherOpen}
+          onClose={() => setVoucherOpen(false)}
+          title="New money out"
+          subtitle="Petty cash paid out — attach the receipt photo."
+          size="sm"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setVoucherOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="pcf-voucher-form">
+                Save voucher
+              </Button>
+            </>
+          }
+        >
+          <form id="pcf-voucher-form" className="stack" onSubmit={onVoucherSubmit}>
+            <Field label="Date" htmlFor="pcf-v-date">
+              <TextInput id="pcf-v-date" type="date" required value={vDate} onChange={(e) => setVDate(e.target.value)} />
+            </Field>
+            <Field label="Payee" htmlFor="pcf-v-payee">
+              <TextInput id="pcf-v-payee" required value={vPayee} onChange={(e) => setVPayee(e.target.value)} />
+            </Field>
+            <Field label="Category" htmlFor="pcf-v-cat">
+              <SelectInput id="pcf-v-cat" value={vCategory} onChange={(e) => setVCategory(e.target.value)}>
+                {PCF_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+            <Field label="Purpose" htmlFor="pcf-v-purpose">
+              <TextInput id="pcf-v-purpose" value={vPurpose} onChange={(e) => setVPurpose(e.target.value)} />
+            </Field>
+            <Field label="Amount (₱)" htmlFor="pcf-v-amt">
+              <TextInput
+                id="pcf-v-amt"
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+                value={vAmount}
+                onChange={(e) => setVAmount(e.target.value)}
+              />
+            </Field>
+            <Field label="Receipt photo" htmlFor="pcf-v-file">
+              <input
+                id="pcf-v-file"
+                type="file"
+                accept="image/*"
+                onChange={(e) => setVFile(e.target.files?.[0] ?? null)}
+              />
+            </Field>
+          </form>
+        </Modal>
+      ) : null}
+
+      {selectedFund ? (
+        <Modal
+          open={replenishOpen}
+          onClose={() => setReplenishOpen(false)}
+          title={`Replenish fund — ${selectedFund.branch?.name ?? selectedFund.branch_id}`}
+          subtitle={`Unrecovered vouchers: ${unrecovered.length} · ${formatPhp(unrecoveredTotal)}`}
+          size="sm"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setReplenishOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="pcf-replenish-form">
+                Record replenishment
+              </Button>
+            </>
+          }
+        >
+          <form id="pcf-replenish-form" className="stack" onSubmit={onReplenishSubmit}>
+            <Field label="Amount (₱)" htmlFor="pcf-r-amt">
+              <TextInput
+                id="pcf-r-amt"
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+                value={rAmount}
+                onChange={(e) => setRAmount(e.target.value)}
+              />
+            </Field>
+            <Field label="Reference no." htmlFor="pcf-r-ref">
+              <TextInput id="pcf-r-ref" required value={rRef} onChange={(e) => setRRef(e.target.value)} />
+            </Field>
+            <Field label="Notes" htmlFor="pcf-r-notes">
+              <TextArea id="pcf-r-notes" value={rNotes} onChange={(e) => setRNotes(e.target.value)} />
+            </Field>
+          </form>
+        </Modal>
       ) : null}
     </div>
   )

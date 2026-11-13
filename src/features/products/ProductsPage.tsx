@@ -5,6 +5,7 @@ import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
+import { Modal } from '../../components/Modal'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate, todayInputValue } from '../../lib/dates'
@@ -42,6 +43,9 @@ export function ProductsPage() {
   const [selectedVarietyId, setSelectedVarietyId] = useState<string>('')
   const [skuSize, setSkuSize] = useState<SackSize>(25)
   const [skuBarcode, setSkuBarcode] = useState('')
+  const [varietyOpen, setVarietyOpen] = useState(false)
+  const [skuOpen, setSkuOpen] = useState(false)
+  const [priceOpen, setPriceOpen] = useState(false)
 
   const [priceSkuId, setPriceSkuId] = useState('')
   const [priceAmount, setPriceAmount] = useState('')
@@ -127,6 +131,7 @@ export function ProductsPage() {
       return
     }
     setVarietyName('')
+    setVarietyOpen(false)
     setMessage(`Variety “${data.name}” added.`)
     await load()
   }
@@ -147,6 +152,7 @@ export function ProductsPage() {
       return
     }
     setSkuBarcode('')
+    setSkuOpen(false)
     setMessage(`SKU ${skuSize}kg created.`)
     await load()
   }
@@ -175,6 +181,7 @@ export function ProductsPage() {
     }
 
     setPriceAmount('')
+    setPriceOpen(false)
     setMessage('New price saved. Old sales keep their old price because prices are history rows.')
     setHistorySkuId(priceSkuId)
     await load()
@@ -203,15 +210,38 @@ export function ProductsPage() {
         </div>
       </div>
 
-      {error ? <div className="error-banner">{error}</div> : null}
+      {error && !varietyOpen && !skuOpen && !priceOpen ? (
+        <div className="error-banner">{error}</div>
+      ) : null}
       {message ? <div className="success-banner">{message}</div> : null}
       {loading ? <SkeletonTable rows={4} cols={4} /> : null}
 
-      <Card title="Rice varieties" subtitle="Kasikas Jasmine, Japonica, White, Parboiled, Glutinous">
-        {canEditProducts ? (
-          <form className="stack" onSubmit={addVariety} style={{ marginBottom: 16 }}>
-            <div className="row" style={{ alignItems: 'flex-end' }}>
-              <div style={{ flex: 1, minWidth: 180 }}>
+      <Card
+        title="Rice varieties"
+        subtitle="Kasikas Jasmine, Japonica, White, Parboiled, Glutinous"
+        action={canEditProducts ? <Button onClick={() => setVarietyOpen(true)}>Add variety</Button> : null}
+      >
+        <Modal
+          open={varietyOpen}
+          onClose={() => setVarietyOpen(false)}
+          title="New variety"
+          subtitle="Add a rice variety to the price list."
+          size="sm"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setVarietyOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="variety-form">
+                Add variety
+              </Button>
+            </>
+          }
+        >
+          <form id="variety-form" className="stack" onSubmit={addVariety}>
+            {error ? <div className="error-banner">{error}</div> : null}
+            <div className="stack">
+              <div>
                 <Field label="Variety name" htmlFor="variety-name">
                   <TextInput
                     id="variety-name"
@@ -222,7 +252,7 @@ export function ProductsPage() {
                   />
                 </Field>
               </div>
-              <div style={{ minWidth: 160 }}>
+              <div>
                 <Field label="Origin" htmlFor="variety-origin">
                   <SelectInput
                     id="variety-origin"
@@ -234,10 +264,9 @@ export function ProductsPage() {
                   </SelectInput>
                 </Field>
               </div>
-              <Button type="submit">Add variety</Button>
             </div>
           </form>
-        ) : null}
+        </Modal>
 
         <ChipRow>
           {varieties.map((v) => (
@@ -278,15 +307,37 @@ export function ProductsPage() {
         title="SKUs (sack sizes)"
         subtitle="5kg · 25kg · 50kg with optional barcode"
         action={
-          skusForSelected.length > 0 ? (
-            <Button variant="secondary" onClick={exportSkus}>
-              Export CSV
-            </Button>
-          ) : undefined
+          <div className="row">
+            {skusForSelected.length > 0 ? (
+              <Button variant="secondary" onClick={exportSkus}>
+                Export CSV
+              </Button>
+            ) : null}
+            {canEditProducts && selectedVarietyId ? (
+              <Button onClick={() => setSkuOpen(true)}>Add SKU</Button>
+            ) : null}
+          </div>
         }
       >
-        {canEditProducts && selectedVarietyId ? (
-          <form className="stack" onSubmit={addSku} style={{ marginBottom: 16 }}>
+        <Modal
+          open={skuOpen}
+          onClose={() => setSkuOpen(false)}
+          title="New SKU"
+          subtitle="Sack size for the selected variety."
+          size="sm"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setSkuOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="sku-form">
+                Add SKU
+              </Button>
+            </>
+          }
+        >
+          <form id="sku-form" className="stack" onSubmit={addSku}>
+            {error ? <div className="error-banner">{error}</div> : null}
             <Field label="Sack size" htmlFor="sku-size">
               <ChipRow>
                 {SACK_SIZES.map((size) => (
@@ -296,8 +347,8 @@ export function ProductsPage() {
                 ))}
               </ChipRow>
             </Field>
-            <div className="row" style={{ alignItems: 'flex-end' }}>
-              <div style={{ flex: 1, minWidth: 180 }}>
+            <div>
+              <div>
                 <Field label="Barcode" htmlFor="sku-barcode" hint="Optional · POS-ready">
                   <TextInput
                     id="sku-barcode"
@@ -307,11 +358,10 @@ export function ProductsPage() {
                   />
                 </Field>
               </div>
-              <Button type="submit">Add SKU</Button>
             </div>
             <input id="sku-size" className="sr-only" readOnly value={skuSize} />
           </form>
-        ) : null}
+        </Modal>
 
         {skusForSelected.length === 0 ? (
           <div className="empty-state">No SKUs for this variety yet.</div>
@@ -353,9 +403,27 @@ export function ProductsPage() {
             ? 'Owner and General Accountant can set prices. Inserts a new dated row.'
             : 'View only for your role'
         }
+        action={canEditPrices ? <Button onClick={() => setPriceOpen(true)}>Set price</Button> : null}
       >
-        {canEditPrices ? (
-          <form className="stack" onSubmit={setPrice} style={{ marginBottom: 16 }}>
+        <Modal
+          open={priceOpen}
+          onClose={() => setPriceOpen(false)}
+          title="Set new price"
+          subtitle="Saved as a new dated row; past sales keep their old price."
+          size="sm"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setPriceOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="price-form">
+                Set price
+              </Button>
+            </>
+          }
+        >
+          <form id="price-form" className="stack" onSubmit={setPrice}>
+            {error ? <div className="error-banner">{error}</div> : null}
             <Field label="SKU" htmlFor="price-sku">
               <SelectInput
                 id="price-sku"
@@ -371,8 +439,8 @@ export function ProductsPage() {
                 ))}
               </SelectInput>
             </Field>
-            <div className="row" style={{ alignItems: 'flex-end' }}>
-              <div style={{ flex: 1, minWidth: 140 }}>
+            <div>
+              <div>
                 <Field label="Price per sack (₱)" htmlFor="price-amount">
                   <TextInput
                     id="price-amount"
@@ -384,7 +452,7 @@ export function ProductsPage() {
                   />
                 </Field>
               </div>
-              <div style={{ minWidth: 160 }}>
+              <div>
                 <Field label="Effective from" htmlFor="price-from">
                   <TextInput
                     id="price-from"
@@ -395,10 +463,9 @@ export function ProductsPage() {
                   />
                 </Field>
               </div>
-              <Button type="submit">Set price</Button>
             </div>
           </form>
-        ) : null}
+        </Modal>
 
         <Table>
           <thead>

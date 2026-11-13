@@ -5,6 +5,7 @@ import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
+import { Modal } from '../../components/Modal'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchFundRequests, type FundRequest } from '../fund-requests/fundRequestsApi'
@@ -297,7 +298,7 @@ export function LiquidationsPage() {
         </div>
       </div>
 
-      {error ? <div className="error-banner">{error}</div> : null}
+      {error && !selected ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
 
       <ChipRow>
@@ -421,10 +422,30 @@ export function LiquidationsPage() {
       )}
 
       {selected ? (
-        <Card
+        <Modal
+          open
+          onClose={() => setSelectedId(null)}
           title={`Liquidation — ${selected.fund_request?.purpose ?? 'Cash advance'}`}
           subtitle={`${formatPhp(selected.requested_amount)} requested · ${selected.status === 'draft' ? 'Draft' : 'Submitted'}${selected.fund_request?.requester ? ` · ${selected.fund_request.requester.full_name}` : ''}`}
+          size="lg"
+          footer={
+            selected.status === 'draft' && canPrepare ? (
+              <>
+                <Button variant="secondary" onClick={() => void onSaveDraft()} loading={saving}>
+                  Save draft
+                </Button>
+                <Button onClick={() => void onSubmitLiquidation()} loading={saving}>
+                  Submit liquidation
+                </Button>
+              </>
+            ) : (
+              <Button variant="secondary" onClick={() => setSelectedId(null)}>
+                Close
+              </Button>
+            )
+          }
         >
+          {error ? <div className="error-banner">{error}</div> : null}
           <div className="row" style={{ flexWrap: 'wrap', gap: 24 }}>
             <div>
               <p className="muted">Requested</p>
@@ -578,14 +599,6 @@ export function LiquidationsPage() {
               <Field label="Notes" htmlFor="liq-notes">
                 <TextArea id="liq-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
               </Field>
-              <div className="row">
-                <Button variant="secondary" onClick={() => void onSaveDraft()} loading={saving}>
-                  Save draft
-                </Button>
-                <Button onClick={() => void onSubmitLiquidation()} loading={saving}>
-                  Submit liquidation
-                </Button>
-              </div>
             </>
           ) : (
             <>
@@ -595,7 +608,7 @@ export function LiquidationsPage() {
               </p>
             </>
           )}
-        </Card>
+        </Modal>
       ) : null}
     </div>
   )

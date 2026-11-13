@@ -90,3 +90,29 @@
     padding: 0;
   }
 }
+
+/* ── New-sale modal aside ─────────────────────────────────── */
+.sale-aside {
+  gap: 18px;
+}
+
+.sale-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+  margin-top: auto;
+}
+
+.sale-summary-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.9rem;
+}
+
+.sale-aside .sale-total-bar {
+  margin-top: 6px;
+}

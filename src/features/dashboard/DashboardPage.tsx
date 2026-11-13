@@ -1,21 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Badge } from '../../components/Badge'
 import { SkeletonText } from '../../components/Loading'
 import { Card } from '../../components/Card'
+import { SelectInput } from '../../components/Field'
 import { useAuth } from '../auth/AuthContext'
 import {
-  canApproveFundRequest,
-  canReleaseFundRequest,
-  canReviewFundRequest,
   canViewAllBranchesReports,
-  canViewExpenses,
+  canViewContainers,
   canViewFundRequests,
   canViewPcf,
   canViewSales,
 } from '../../lib/roles'
 import { fetchBranches, fetchStockBalances, type StockBalanceRow } from '../inventory/inventoryApi'
-import { fetchSales, type Sale } from '../sales/salesApi'
+import { fetchOverdueDues, fetchSales, type InstallmentDue, type Sale } from '../sales/salesApi'
+import { fetchContainers, type Container } from '../containers/containersApi'
 import { fetchFundBalances, type PcfFundBalance } from '../pcf/pcfApi'
 import { fetchFundRequests, type FundRequest, type FundRequestStatus } from '../fund-requests/fundRequestsApi'
 import { supabase } from '../../lib/supabase'
@@ -30,21 +28,26 @@ const ACTIONABLE: Record<string, FundRequestStatus[]> = {
   general_accountant: ['approved'],
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  submitted: 'Waiting on accounting',
-  forwarded: 'Waiting on owner',
-  approved: 'Ready to release',
-}
-
-function weekStartValue(): string {
-  const d = new Date()
-  d.setDate(d.getDate() - 6)
-  return d.toISOString().slice(0, 10)
-}
-
 interface PaymentRow {
   amount: number
   sale: { branch_id: string } | null
+}
+
+interface AttentionItem {
+  key: string
+  tone: 'warning' | 'danger' | 'ok'
+  count: number
+  label: string
+  action: string
+  to: string
+}
+
+function compactPhp(value: number) {
+  if (Math.abs(value) >= 1_000_000) {
+    return `₱${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`
+  }
+  if (Math.abs(value) >= 1_000) return `₱${Math.round(value / 1_000)}k`
+  return formatPhp(value)
 }
 
 export function DashboardPage() {
@@ -60,6 +63,8 @@ export function DashboardPage() {
   const [funds, setFunds] = useState<PcfFundBalance[]>([])
   const [fundRequests, setFundRequests] = useState<FundRequest[]>([])
   const [paymentsToday, setPaymentsToday] = useState(0)
+  const [overdueCount, setOverdueCount] = useState(0)
+  const [nextContainer, setNextContainer] = useState<Container | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -77,16 +82,19 @@ export function DashboardPage() {
       setLoading(true)
       setError('')
       try {
-        const [saleRows, balanceRows, fundRows, requestRows, paymentRes] = await Promise.all([
-          canViewSales(role) ? fetchSales(branchFilter) : Promise.resolve([]),
-          fetchStockBalances(branchFilter),
-          canViewPcf(role) ? fetchFundBalances() : Promise.resolve([]),
-          canViewFundRequests(role) ? fetchFundRequests() : Promise.resolve([]),
-          supabase
-            .from('payments')
-            .select('amount, sale:sales(branch_id)')
-            .eq('payment_date', today),
-        ])
+        const [saleRows, balanceRows, fundRows, requestRows, paymentRes, dueRows, containerRows] =
+          await Promise.all([
+            canViewSales(role) ? fetchSales(branchFilter) : Promise.resolve([]),
+            fetchStockBalances(branchFilter),
+            canViewPcf(role) ? fetchFundBalances() : Promise.resolve([]),
+            canViewFundRequests(role) ? fetchFundRequests() : Promise.resolve([]),
+            supabase
+              .from('payments')
+              .select('amount, sale:sales(branch_id)')
+              .eq('payment_date', today),
+            canViewSales(role) ? fetchOverdueDues() : Promise.resolve([]),
+            canViewContainers(role) ? fetchContainers() : Promise.resolve([]),
+          ])
         if (cancelled) return
 
         if (paymentRes.error) throw paymentRes.error
@@ -94,11 +102,26 @@ export function DashboardPage() {
           (p) => !branchFilter || p.sale?.branch_id === branchFilter,
         )
 
+        const scopedDues = (dueRows as InstallmentDue[]).filter(
+          (d) => !branchFilter || d.plan?.sale?.branch_id === branchFilter,
+        )
+        const upcoming = (containerRows as Container[])
+          .filter(
+            (c) =>
+              (c.status === 'in_transit' || c.status === 'arrived') &&
+              !!c.expected_arrival &&
+              c.expected_arrival >= today &&
+              (!branchFilter || c.primary_branch_id === branchFilter),
+          )
+          .sort((a, b) => (a.expected_arrival ?? '').localeCompare(b.expected_arrival ?? ''))
+
         setSales(saleRows)
         setBalances(balanceRows)
         setFunds(fundRows)
         setFundRequests(requestRows)
         setPaymentsToday(todayPayments.reduce((sum, p) => sum + Number(p.amount), 0))
+        setOverdueCount(scopedDues.length)
+        setNextContainer(upcoming[0] ?? null)
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load the dashboard.')
       } finally {
@@ -119,8 +142,29 @@ export function DashboardPage() {
   const pettyCash = branchFunds.reduce((sum, f) => sum + Number(f.balance), 0)
   const pettyCashLow = branchFunds.some((f) => f.is_low)
 
+  const last7 = useMemo(() => {
+    const byDate = new Map<string, number>()
+    for (const sale of sales) {
+      byDate.set(sale.sale_date, (byDate.get(sale.sale_date) ?? 0) + Number(sale.total))
+    }
+    return Array.from({ length: 7 }, (_, index) => {
+      const offset = 6 - index
+      const d = new Date()
+      d.setDate(d.getDate() - offset)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      return {
+        key,
+        label: offset === 0 ? 'Today' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }),
+        total: byDate.get(key) ?? 0,
+        isToday: offset === 0,
+      }
+    })
+  }, [sales])
+  const weekTotal = last7.reduce((sum, day) => sum + day.total, 0)
+  const weekMax = Math.max(...last7.map((day) => day.total), 0)
+
   const varietyTotals = (() => {
-    const start = weekStartValue()
+    const start = last7[0]?.key ?? today
     const totals = new Map<string, number>()
     for (const sale of sales) {
       if (sale.sale_date < start) continue
@@ -133,23 +177,8 @@ export function DashboardPage() {
   })()
   const varietyMax = varietyTotals[0]?.[1] ?? 0
 
-  const stockRows = (() => {
-    if (branchId) {
-      return balances.filter((b) => b.branch_id === branchId).slice(0, 6)
-    }
-    const bySku = new Map<string, StockBalanceRow>()
-    for (const row of balances) {
-      const existing = bySku.get(row.sku_id)
-      if (!existing) {
-        bySku.set(row.sku_id, { ...row })
-      } else {
-        existing.on_hand += row.on_hand
-        existing.reorder_level = Math.max(existing.reorder_level, row.reorder_level)
-        existing.is_low = existing.on_hand <= existing.reorder_level
-      }
-    }
-    return [...bySku.values()].sort((a, b) => Number(b.is_low) - Number(a.is_low) || b.on_hand - a.on_hand).slice(0, 6)
-  })()
+  const outStockCount = balances.filter((row) => row.on_hand <= 0).length
+  const lowStockCount = balances.filter((row) => row.on_hand > 0 && row.is_low).length
 
   const awaiting = (() => {
     if (!canViewFundRequests(role)) return []
@@ -161,97 +190,140 @@ export function DashboardPage() {
       .slice(0, 5)
   })()
 
-  const now = new Date()
-  const dateStr = now.toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-  const greeting = (() => {
-    const h = now.getHours()
-    if (h < 12) return 'Good morning'
-    if (h < 18) return 'Good afternoon'
-    return 'Good evening'
-  })()
+  const attention: AttentionItem[] = []
+  if (canViewFundRequests(role) && awaiting.length > 0) {
+    attention.push({
+      key: 'requests',
+      tone: 'warning',
+      count: awaiting.length,
+      label: 'Fund requests waiting on you',
+      action: 'Review',
+      to: '/app/fund-requests',
+    })
+  }
+  if (outStockCount + lowStockCount > 0) {
+    attention.push({
+      key: 'stock',
+      tone: outStockCount > 0 ? 'danger' : 'warning',
+      count: outStockCount || lowStockCount,
+      label:
+        outStockCount > 0
+          ? `Out of stock, ${lowStockCount} low`
+          : `${lowStockCount} low stock`,
+      action: 'View stock',
+      to: '/app/inventory',
+    })
+  }
+  if (canViewSales(role) && overdueCount > 0) {
+    attention.push({
+      key: 'overdue',
+      tone: 'warning',
+      count: overdueCount,
+      label: 'Overdue installments',
+      action: 'View',
+      to: '/app/sales',
+    })
+  }
+  if (nextContainer?.expected_arrival) {
+    const arriveLabel = new Date(`${nextContainer.expected_arrival}T00:00:00`).toLocaleDateString(
+      'en-PH',
+      { month: 'short', day: 'numeric' },
+    )
+    attention.push({
+      key: 'container',
+      tone: 'ok',
+      count: 1,
+      label: `Container arriving ${arriveLabel}`,
+      action: 'View',
+      to: '/app/containers',
+    })
+  }
+
+  const dateStr = new Date().toLocaleDateString('en-PH', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  })
   const scopeLabel = branchId
     ? branches.find((b) => b.id === branchId)?.name ?? user!.profile.branch?.name ?? 'Branch'
     : 'All branches'
 
   return (
-    <div className="app-page stack" style={{ gap: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+    <div className="app-page stack" style={{ gap: 20 }}>
+      <div className="page-header">
         <div>
-          <h1 style={{ fontSize: '1.65rem', marginBottom: 4, letterSpacing: '-0.03em' }}>Dashboard</h1>
-          <p className="muted">
-            {greeting}, {user!.profile.full_name.split(' ')[0]} · {scopeLabel} · {dateStr}
+          <h1>Dashboard</h1>
+          <p>
+            {scopeLabel} · {dateStr}
           </p>
         </div>
         {canViewAll ? (
-          <select
-            className="ui-input"
+          <SelectInput
+            className="dash-branch-pick"
             value={branchId}
             onChange={(e) => setBranchId(e.target.value)}
             aria-label="Dashboard branch"
-            style={{ maxWidth: 240 }}
           >
             <option value="">All branches</option>
             {branches.map((b) => (
               <option key={b.id} value={b.id}>{b.name}</option>
             ))}
-          </select>
+          </SelectInput>
         ) : null}
       </div>
 
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <div className="metric-grid">
-        <div className="metric-card">
-          <div className="metric-card-icon">🛒</div>
-          <div className="metric-card-label">Today's sales</div>
-          <div className="metric-card-value">{loading ? '—' : formatPhp(todaySales)}</div>
-          <div className="metric-card-sub">{todayRows.length} transaction{todayRows.length !== 1 ? 's' : ''} · auto-computed</div>
+      <div className="dash-metrics">
+        <div className="dash-metric">
+          <span className="dash-metric-label">Today's sales</span>
+          <strong className="dash-metric-value">{loading ? '—' : formatPhp(todaySales)}</strong>
+          <span className="dash-metric-sub">{todayRows.length} sale{todayRows.length === 1 ? '' : 's'}</span>
         </div>
-        <div className="metric-card">
-          <div className="metric-card-icon">💵</div>
-          <div className="metric-card-label">Cash on hand</div>
-          <div className="metric-card-value">{loading ? '—' : formatPhp(paymentsToday)}</div>
-          <div className="metric-card-sub">From encoded payments today</div>
+        <div className="dash-metric">
+          <span className="dash-metric-label">Cash on hand</span>
+          <strong className="dash-metric-value">{loading ? '—' : formatPhp(paymentsToday)}</strong>
+          <span className="dash-metric-sub">From today's payments</span>
         </div>
-        <div className="metric-card">
-          <div className="metric-card-icon">💰</div>
-          <div className="metric-card-label">Customer balances</div>
-          <div className="metric-card-value">{loading ? '—' : formatPhp(receivables)}</div>
-          <div className="metric-card-sub">Installments, no interest</div>
+        <div className="dash-metric">
+          <span className="dash-metric-label">Customer balances</span>
+          <strong className="dash-metric-value">{loading ? '—' : formatPhp(receivables)}</strong>
+          <span className="dash-metric-sub">Installments, no interest</span>
         </div>
         {canViewPcf(role) ? (
-          <div className="metric-card" style={pettyCashLow ? { borderColor: 'var(--color-warning-border)' } : {}}>
-            <div className="metric-card-icon gold">🏦</div>
-            <div className="metric-card-label">{branchId ? 'Petty cash (this branch)' : 'Petty cash (all funds)'}</div>
-            <div className="metric-card-value" style={pettyCashLow ? { color: 'var(--color-warning)' } : {}}>
-              {loading ? '—' : formatPhp(pettyCash)}
-            </div>
-            <div className="metric-card-sub">
-              {pettyCashLow ? <Badge tone="warning">Replenish soon</Badge> : 'Within threshold'}
-            </div>
+          <div className={`dash-metric${pettyCashLow ? ' is-warning' : ''}`}>
+            <span className="dash-metric-label">Petty cash</span>
+            <strong className="dash-metric-value">{loading ? '—' : formatPhp(pettyCash)}</strong>
+            <span className="dash-metric-sub">
+              {pettyCashLow ? 'Replenish soon' : 'Within threshold'}
+            </span>
           </div>
         ) : null}
       </div>
 
       <div className="dash-split">
         {canViewSales(role) ? (
-          <Card title="Sales by variety · this week" subtitle="Revenue from encoded sales, last 7 days">
+          <Card
+            title="Sales, last 7 days"
+            action={<span className="dash-chart-total">{formatPhp(weekTotal)} total</span>}
+          >
             {loading ? (
               <SkeletonText lines={4} />
-            ) : varietyTotals.length === 0 ? (
-              <p className="faint">No sales in the last 7 days for this scope.</p>
             ) : (
-              <div className="dash-bars">
-                {varietyTotals.map(([name, amount]) => (
-                  <div className="dash-bar-row" key={name}>
-                    <span className="dash-bar-label">{name}</span>
-                    <span className="dash-bar-track">
-                      <span
-                        className="dash-bar-fill"
-                        style={{ width: `${varietyMax ? Math.max(4, (amount / varietyMax) * 100) : 0}%` }}
+              <div className="dash-chart">
+                {last7.map((day) => (
+                  <div className="dash-chart-col" key={day.key}>
+                    <div className="dash-chart-plot">
+                      <div
+                        className={`dash-chart-bar${day.isToday ? ' is-today' : ''}`}
+                        style={{
+                          height: `${day.total > 0 && weekMax > 0 ? Math.max(4, (day.total / weekMax) * 100) : 0}%`,
+                        }}
+                        title={`${day.label}: ${formatPhp(day.total)}`}
                       />
-                    </span>
-                    <span className="dash-bar-value">{formatPhp(amount)}</span>
+                    </div>
+                    <span className="dash-chart-label">{day.label}</span>
                   </div>
                 ))}
               </div>
@@ -259,22 +331,20 @@ export function DashboardPage() {
           </Card>
         ) : null}
 
-        <Card title="Stock on hand" subtitle={branchId ? scopeLabel : 'All branches combined'}>
+        <Card title="Needs attention">
           {loading ? (
-            <SkeletonText lines={4} />
-          ) : stockRows.length === 0 ? (
-            <p className="faint">No SKUs set up yet.</p>
+            <SkeletonText lines={3} />
+          ) : attention.length === 0 ? (
+            <p className="faint">Nothing needs attention right now.</p>
           ) : (
-            <div className="dash-stock-list">
-              {stockRows.map((row) => (
-                <div className="dash-stock-row" key={`${row.branch_id}-${row.sku_id}`}>
-                  <span>
-                    {row.variety_name} · {row.sack_size}kg
+            <div className="dash-attention">
+              {attention.map((item) => (
+                <div className="dash-attn-row" key={item.key}>
+                  <span className={`dash-attn-count${item.tone === 'danger' ? ' is-danger' : item.tone === 'ok' ? ' is-ok' : ''}`}>
+                    {item.count}
                   </span>
-                  <span className="dash-stock-qty">
-                    {row.on_hand.toLocaleString('en-PH')} sacks{' '}
-                    <Badge tone={row.is_low ? 'warning' : 'muted'}>{row.is_low ? 'Low' : 'OK'}</Badge>
-                  </span>
+                  <span className="dash-attn-label">{item.label}</span>
+                  <Link to={item.to} className="dash-attn-link">{item.action}</Link>
                 </div>
               ))}
             </div>
@@ -282,58 +352,30 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      {canViewFundRequests(role) ? (
-        <Card
-          title={ACTIONABLE[role as string]?.length ? 'Fund requests awaiting action' : 'Fund requests in progress'}
-          subtitle={
-            ACTIONABLE[role as string]?.length
-              ? 'Waiting on your review, approval, or release'
-              : 'Requests still moving through the approval flow'
-          }
-        >
+      {canViewSales(role) ? (
+        <Card title="Sales by variety · this week">
           {loading ? (
-            <SkeletonText lines={3} />
-          ) : awaiting.length === 0 ? (
-            <p className="faint">Nothing is waiting on you right now.</p>
+            <SkeletonText lines={4} />
+          ) : varietyTotals.length === 0 ? (
+            <p className="faint">No sales in the last 7 days for this scope.</p>
           ) : (
-            <div className="dash-request-list">
-              {awaiting.map((request) => {
-                const canRelease = canReleaseFundRequest(role) && request.status === 'approved'
-                const canReview = canReviewFundRequest(role) || canApproveFundRequest(role)
-                return (
-                  <div className="dash-request-row" key={request.id}>
-                    <div className="dash-request-main">
-                      <strong>{request.purpose}</strong>
-                      <span className="faint">
-                        {request.category ? `${request.category} · ` : ''}
-                        {request.requester?.full_name ?? 'Requester'}
-                        {!branchId && request.branch?.name ? ` · ${request.branch.name}` : ''}
-                      </span>
-                    </div>
-                    <strong className="dash-request-amount">{formatPhp(request.amount)}</strong>
-                    <Badge tone={request.status === 'approved' ? 'warning' : 'muted'}>
-                      {STATUS_LABELS[request.status] ?? request.status}
-                    </Badge>
-                    <Link to="/app/fund-requests" className="dash-request-link">
-                      {canRelease ? 'Release' : canReview ? 'Review' : 'Open'}
-                    </Link>
-                  </div>
-                )
-              })}
+            <div className="dash-bars">
+              {varietyTotals.map(([name, amount]) => (
+                <div className="dash-bar-row" key={name}>
+                  <span className="dash-bar-label">{name}</span>
+                  <span className="dash-bar-track">
+                    <span
+                      className="dash-bar-fill"
+                      style={{ width: `${varietyMax ? Math.max(4, (amount / varietyMax) * 100) : 0}%` }}
+                    />
+                  </span>
+                  <span className="dash-bar-value">{compactPhp(amount)}</span>
+                </div>
+              ))}
             </div>
           )}
         </Card>
       ) : null}
-
-      <Card title="Quick actions">
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-          {canViewSales(role) && <QuickLink to="/app/sales" label="🛒 New sale" brand />}
-          <QuickLink to="/app/inventory" label="📦 Inventory" />
-          {canViewExpenses(role) && <QuickLink to="/app/expenses" label="💳 Expenses" />}
-          {canViewFundRequests(role) && <QuickLink to="/app/fund-requests" label="📋 Fund requests" />}
-          <QuickLink to="/app/reports" label="📊 Reports" />
-        </div>
-      </Card>
 
       {!canViewSales(role) ? (
         <Card title="Welcome to JMG Staff System">
@@ -344,13 +386,5 @@ export function DashboardPage() {
         </Card>
       ) : null}
     </div>
-  )
-}
-
-function QuickLink({ to, label, brand = false }: { to: string; label: string; brand?: boolean }) {
-  return (
-    <Link to={to} className={`dash-quick-link${brand ? ' dash-quick-link-brand' : ''}`}>
-      {label}
-    </Link>
   )
 }

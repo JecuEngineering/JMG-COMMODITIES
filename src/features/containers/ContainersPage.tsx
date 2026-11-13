@@ -5,6 +5,7 @@ import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
+import { Modal } from '../../components/Modal'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches, fetchSkus, skuLabel } from '../inventory/inventoryApi'
@@ -67,6 +68,11 @@ export function ContainersPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string>('')
+
+  const [supOpen, setSupOpen] = useState(false)
+  const [purOpen, setPurOpen] = useState(false)
+  const [payOpen, setPayOpen] = useState(false)
+  const [contOpen, setContOpen] = useState(false)
 
   // Supplier form
   const [supName, setSupName] = useState('')
@@ -177,6 +183,7 @@ export function ContainersPage() {
     setError(null)
     try {
       await createSupplier({ name: supName.trim(), contact: supContact, notes: supNotes })
+      setSupOpen(false)
       setMessage('Supplier added.')
       setSupName('')
       setSupContact('')
@@ -207,6 +214,7 @@ export function ContainersPage() {
         total,
         notes: purNotes,
       })
+      setPurOpen(false)
       setMessage('Purchase recorded.')
       setPurTotal('')
       setPurNotes('')
@@ -223,6 +231,7 @@ export function ContainersPage() {
     const amount = Number(payAmount)
     try {
       await recordPurchasePayment(payTarget, amount)
+      setPayOpen(false)
       setMessage('Supplier payment recorded.')
       setPayAmount('')
       setPayPurchaseId('')
@@ -248,6 +257,7 @@ export function ContainersPage() {
         notes: cNotes,
         lines: [{ sku_id: cSku, branch_id: cBranch, expected_sacks: Number(cExpected) }],
       })
+      setContOpen(false)
       setMessage('Container created as In transit.')
       setCNumber('')
       setCRef('')
@@ -438,30 +448,46 @@ export function ContainersPage() {
 
       {tab === 'suppliers' ? (
         <div className="stack">
-          {canManage ? (
-            <Card title="Add supplier">
-              <form className="stack" onSubmit={onAddSupplier}>
-                <Field label="Name" htmlFor="sup-name">
-                  <TextInput id="sup-name" required value={supName} onChange={(e) => setSupName(e.target.value)} />
-                </Field>
-                <Field label="Contact" htmlFor="sup-contact">
-                  <TextInput id="sup-contact" value={supContact} onChange={(e) => setSupContact(e.target.value)} />
-                </Field>
-                <Field label="Notes" htmlFor="sup-notes">
-                  <TextArea id="sup-notes" value={supNotes} onChange={(e) => setSupNotes(e.target.value)} />
-                </Field>
-                <Button type="submit">Save supplier</Button>
-              </form>
-            </Card>
-          ) : null}
+          <Modal
+            open={supOpen && canManage}
+            onClose={() => setSupOpen(false)}
+            title="Add supplier"
+            subtitle="Used by containers and purchase payables."
+            size="sm"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setSupOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" form="supplier-form">
+                  Save supplier
+                </Button>
+              </>
+            }
+          >
+            <form id="supplier-form" className="stack" onSubmit={onAddSupplier}>
+              <Field label="Name" htmlFor="sup-name">
+                <TextInput id="sup-name" required value={supName} onChange={(e) => setSupName(e.target.value)} />
+              </Field>
+              <Field label="Contact" htmlFor="sup-contact">
+                <TextInput id="sup-contact" value={supContact} onChange={(e) => setSupContact(e.target.value)} />
+              </Field>
+              <Field label="Notes" htmlFor="sup-notes">
+                <TextArea id="sup-notes" value={supNotes} onChange={(e) => setSupNotes(e.target.value)} />
+              </Field>
+            </form>
+          </Modal>
           <Card
             title="Supplier list"
             action={
-              suppliers.length > 0 ? (
-                <Button variant="secondary" onClick={exportSuppliers}>
-                  Export CSV
-                </Button>
-              ) : undefined
+              <div className="row">
+                {canManage ? <Button onClick={() => setSupOpen(true)}>Add supplier</Button> : null}
+                {suppliers.length > 0 ? (
+                  <Button variant="secondary" onClick={exportSuppliers}>
+                    Export CSV
+                  </Button>
+                ) : null}
+              </div>
             }
           >
             {suppliers.length === 0 ? (
@@ -492,48 +518,77 @@ export function ContainersPage() {
 
       {tab === 'purchases' ? (
         <div className="stack">
+          <Modal
+            open={purOpen && canManage}
+            onClose={() => setPurOpen(false)}
+            title="New supplier purchase"
+            subtitle="A payable for rice bought on account."
+            size="sm"
+            footer={
+              <>
+                <Button variant="secondary" onClick={() => setPurOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" form="purchase-form">
+                  Save purchase
+                </Button>
+              </>
+            }
+          >
+            <form id="purchase-form" className="stack" onSubmit={onAddPurchase}>
+              <Field label="Supplier" htmlFor="pur-sup">
+                <SelectInput
+                  id="pur-sup"
+                  required
+                  value={purSupplier}
+                  onChange={(e) => setPurSupplier(e.target.value)}
+                >
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </SelectInput>
+              </Field>
+              <Field label="Date" htmlFor="pur-date">
+                <TextInput id="pur-date" type="date" value={purDate} onChange={(e) => setPurDate(e.target.value)} />
+              </Field>
+              <Field label="Total (₱)" htmlFor="pur-total">
+                <TextInput
+                  id="pur-total"
+                  required
+                  inputMode="decimal"
+                  value={purTotal}
+                  onChange={(e) => setPurTotal(e.target.value)}
+                />
+              </Field>
+              <Field label="Notes" htmlFor="pur-notes">
+                <TextInput id="pur-notes" value={purNotes} onChange={(e) => setPurNotes(e.target.value)} />
+              </Field>
+            </form>
+          </Modal>
           {canManage ? (
-            <Card title="New purchase">
-              <form className="stack" onSubmit={onAddPurchase}>
-                <Field label="Supplier" htmlFor="pur-sup">
-                  <SelectInput
-                    id="pur-sup"
-                    required
-                    value={purSupplier}
-                    onChange={(e) => setPurSupplier(e.target.value)}
-                  >
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </SelectInput>
-                </Field>
-                <Field label="Date" htmlFor="pur-date">
-                  <TextInput id="pur-date" type="date" value={purDate} onChange={(e) => setPurDate(e.target.value)} />
-                </Field>
-                <Field label="Total (₱)" htmlFor="pur-total">
-                  <TextInput
-                    id="pur-total"
-                    required
-                    inputMode="decimal"
-                    value={purTotal}
-                    onChange={(e) => setPurTotal(e.target.value)}
-                  />
-                </Field>
-                <Field label="Notes" htmlFor="pur-notes">
-                  <TextInput id="pur-notes" value={purNotes} onChange={(e) => setPurNotes(e.target.value)} />
-                </Field>
-                <Button type="submit">Save purchase</Button>
-              </form>
-            </Card>
-          ) : null}
-          {canManage ? (
-            <Card title="Record supplier payment" subtitle={`Open payables: ${formatPhp(payablesTotal)}`}>
+            <Modal
+              open={payOpen}
+              onClose={() => setPayOpen(false)}
+              title="Record supplier payment"
+              subtitle={`Open payables: ${formatPhp(payablesTotal)}`}
+              size="sm"
+              footer={
+                <>
+                  <Button variant="secondary" onClick={() => setPayOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" form="payment-form" disabled={!payTarget}>
+                    Record payment
+                  </Button>
+                </>
+              }
+            >
               {openPurchases.length === 0 ? (
                 <p className="faint">No open payables — every purchase is fully paid.</p>
               ) : (
-                <form className="stack" onSubmit={onRecordPayment}>
+                <form id="payment-form" className="stack" onSubmit={onRecordPayment}>
                   <Field label="Purchase" htmlFor="pay-purchase">
                     <SelectInput
                       id="pay-purchase"
@@ -569,19 +624,26 @@ export function ContainersPage() {
                       onChange={(e) => setPayAmount(e.target.value)}
                     />
                   </Field>
-                  <Button type="submit" disabled={!payTarget}>Record payment</Button>
                 </form>
               )}
-            </Card>
+            </Modal>
           ) : null}
           <Card
             title="Purchases"
             action={
-              purchases.length > 0 ? (
-                <Button variant="secondary" onClick={exportPurchases}>
-                  Export CSV
-                </Button>
-              ) : undefined
+              <div className="row">
+                {canManage ? <Button onClick={() => setPurOpen(true)}>New purchase</Button> : null}
+                {canManage && openPurchases.length > 0 ? (
+                  <Button variant="secondary" onClick={() => setPayOpen(true)}>
+                    Record payment
+                  </Button>
+                ) : null}
+                {purchases.length > 0 ? (
+                  <Button variant="secondary" onClick={exportPurchases}>
+                    Export CSV
+                  </Button>
+                ) : null}
+              </div>
             }
           >
             {purchases.length === 0 ? (
@@ -623,8 +685,24 @@ export function ContainersPage() {
       {tab === 'containers' ? (
         <div className="stack">
           {(canManage || canReceive) && canManage ? (
-            <Card title="New container" subtitle="Starts as In transit with supplier reference">
-              <form className="stack" onSubmit={onCreateContainer}>
+            <Modal
+              open={contOpen}
+              onClose={() => setContOpen(false)}
+              title="New container"
+              subtitle="Starts as In transit with supplier reference."
+              size="lg"
+              footer={
+                <>
+                  <Button variant="secondary" onClick={() => setContOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" form="container-form">
+                    Create container
+                  </Button>
+                </>
+              }
+            >
+              <form id="container-form" className="stack" onSubmit={onCreateContainer}>
                 <Field label="Supplier" htmlFor="c-sup">
                   <SelectInput id="c-sup" required value={cSupplier} onChange={(e) => setCSupplier(e.target.value)}>
                     {suppliers.map((s) => (
@@ -685,19 +763,23 @@ export function ContainersPage() {
                 <Field label="Notes" htmlFor="c-notes">
                   <TextInput id="c-notes" value={cNotes} onChange={(e) => setCNotes(e.target.value)} />
                 </Field>
-                <Button type="submit">Create container</Button>
               </form>
-            </Card>
+            </Modal>
           ) : null}
 
           <Card
             title="Container list"
             action={
-              containers.length > 0 ? (
-                <Button variant="secondary" onClick={exportContainers}>
-                  Export CSV
-                </Button>
-              ) : undefined
+              <div className="row">
+                {(canManage || canReceive) && canManage ? (
+                  <Button onClick={() => setContOpen(true)}>New container</Button>
+                ) : null}
+                {containers.length > 0 ? (
+                  <Button variant="secondary" onClick={exportContainers}>
+                    Export CSV
+                  </Button>
+                ) : null}
+              </div>
             }
           >
             {containers.length === 0 ? (

@@ -175,6 +175,260 @@
   letter-spacing: 0.06em;
 }
 
+/* ── Toolbar & tabs ───────────────────────────────────────── */
+.pcf-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.pcf-fund-pick {
+  width: auto;
+  min-width: 170px;
+}
+
+.pcf-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-border);
+  scrollbar-width: none;
+}
+
+.pcf-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.pcf-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 11px 14px;
+  border: none;
+  background: transparent;
+  color: var(--color-ink-soft);
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: inset 0 -2px 0 transparent;
+  transition: color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.pcf-tab:hover {
+  color: var(--color-ink);
+  background: rgba(31, 107, 88, 0.04);
+}
+
+.pcf-tab.is-active {
+  color: var(--color-jade-dark);
+  box-shadow: inset 0 -2px 0 var(--color-jade);
+}
+
+/* ── Fund cards ───────────────────────────────────────────── */
+.pcf-funds {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .pcf-funds {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pcf-fund-card,
+.pcf-ready-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: var(--shadow-soft);
+}
+
+.pcf-eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+
+.pcf-fund-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pcf-fund-head h2 {
+  margin: 3px 0 0;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+
+.pcf-fund-badge {
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--color-ok-soft);
+  color: var(--color-ok);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.pcf-fund-badge.is-low {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+.pcf-fund-balance {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 18px 0 16px;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.pcf-fund-of {
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--color-ink-faint);
+}
+
+.pcf-meter {
+  position: relative;
+  height: 10px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-pill);
+  background: var(--color-neutral-soft);
+}
+
+.pcf-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-jade);
+  transition: width 0.3s var(--ease-out);
+}
+
+.pcf-meter-fill.is-low {
+  background: var(--color-warning);
+}
+
+.pcf-meter-marker {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--color-danger);
+}
+
+.pcf-fund-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  font-size: 0.8rem;
+  color: var(--color-ink-soft);
+}
+
+.pcf-fund-custodian {
+  margin-top: 10px;
+  font-size: 0.82rem;
+  color: var(--color-ink-faint);
+}
+
+.pcf-fund-actions {
+  display: flex;
+  margin-top: 16px;
+}
+
+.pcf-ready-card {
+  align-items: flex-start;
+}
+
+.pcf-ready-total {
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.pcf-ready-sub {
+  margin: 2px 0 0;
+  font-size: 0.82rem;
+  color: var(--color-ink-soft);
+}
+
+.pcf-ready-explain {
+  margin: 12px 0 18px;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  color: var(--color-ink-faint);
+}
+
+.pcf-ready-card .ui-btn {
+  margin-top: auto;
+}
+
+/* ── Recent vouchers ──────────────────────────────────────── */
+.pcf-voucher-search {
+  max-width: 340px;
+  margin-bottom: 14px;
+}
+
+.pcf-voucher-search .ui-input {
+  min-height: 44px;
+}
+
+.pcf-cell-ref {
+  color: var(--color-ink-soft);
+  white-space: nowrap;
+}
+
+.pcf-cell-primary {
+  font-weight: 600;
+}
+
+.pcf-cell-amount {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pcf-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-ok-soft);
+  color: var(--color-ok);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pcf-status.is-pending {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
 @media print {
   .no-print,
   .shell-sidebar,

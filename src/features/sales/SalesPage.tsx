@@ -5,6 +5,7 @@ import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
+import { Modal } from '../../components/Modal'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches, fetchSkus, skuLabel } from '../inventory/inventoryApi'
@@ -35,7 +36,7 @@ import {
 } from './salesApi'
 import './sales.css'
 
-type TabId = 'new' | 'sales' | 'overdue' | 'shifts' | 'receipt'
+type TabId = 'sales' | 'overdue' | 'shifts' | 'receipt'
 
 function addDaysInput(value: string, days: number): string {
   const d = new Date(`${value}T00:00:00`)
@@ -53,7 +54,8 @@ export function SalesPage() {
   const canViewAll = canViewAllBranchesSales(role)
   const profileBranchId = user!.profile.branch_id
 
-  const [tab, setTab] = useState<TabId>('new')
+  const [tab, setTab] = useState<TabId>('sales')
+  const [newSaleOpen, setNewSaleOpen] = useState(false)
   const [branches, setBranches] = useState<Branch[]>([])
   const [skus, setSkus] = useState<Sku[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -350,6 +352,7 @@ export function SalesPage() {
       const sale = await fetchSale(id)
       setReceiptSale(sale)
       setMessage(`Sale saved · DR ${sale?.dr_number ?? ''}. Stock deducted.`)
+      setNewSaleOpen(false)
       setTab('receipt')
       setSacks('20')
       setOrNumber('')
@@ -439,6 +442,131 @@ export function SalesPage() {
 
   const branchOptions = canViewAll ? branches : branches.filter((b) => b.id === profileBranchId)
 
+  const newSaleAside = (
+    <div className="stack sale-aside">
+      <div>
+        <label className="field-label">Payment *</label>
+        <ChipRow>
+          <Chip active={paymentType === 'cash'} onClick={() => setPaymentType('cash')}>
+            Cash
+          </Chip>
+          <Chip active={paymentType === 'gcash'} onClick={() => setPaymentType('gcash')}>
+            GCash
+          </Chip>
+          <Chip active={paymentType === 'installment'} onClick={() => setPaymentType('installment')}>
+            Installment
+          </Chip>
+        </ChipRow>
+        {paymentType === 'installment' ? (
+          <p className="faint" style={{ marginTop: 6 }}>
+            Pay in parts · no interest · balance tracked
+          </p>
+        ) : null}
+      </div>
+
+      {paymentType === 'installment' ? (
+        <div className="stack">
+          <div className="row" style={{ alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 130px' }}>
+              <Field label="Down payment (₱)" htmlFor="down">
+                <TextInput
+                  id="down"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  form="new-sale-form"
+                  value={downPayment}
+                  onChange={(e) => setDownPayment(e.target.value)}
+                />
+              </Field>
+            </div>
+            <div style={{ flex: '1 1 90px' }}>
+              <Field label="Parts" htmlFor="parts">
+                <TextInput
+                  id="parts"
+                  type="number"
+                  min="1"
+                  step="1"
+                  form="new-sale-form"
+                  value={parts}
+                  onChange={(e) => setParts(e.target.value)}
+                />
+              </Field>
+            </div>
+          </div>
+          <Field label="First due date" htmlFor="first-due">
+            <TextInput
+              id="first-due"
+              type="date"
+              form="new-sale-form"
+              value={firstDueDate}
+              onChange={(e) => setFirstDueDate(e.target.value)}
+            />
+          </Field>
+          {installmentPreview ? (
+            <div className="stack" style={{ gap: 6 }}>
+              <p className="faint">
+                {formatPhp(installmentPreview.financed)} over {installmentPreview.partCount} part(s) · 0%
+                interest
+              </p>
+              <Table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Due date</th>
+                    <th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {installmentPreview.rows.map((row) => (
+                    <tr key={row.sequence}>
+                      <td>{row.sequence}</td>
+                      <td>{row.dueDate ? formatDate(row.dueDate) : '—'}</td>
+                      <td>{formatPhp(row.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+              {installmentPreview.partCount > installmentPreview.rows.length ? (
+                <p className="faint">
+                  Showing the first {installmentPreview.rows.length} of {installmentPreview.partCount} parts.
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <p className="faint">Set a down payment below the total to preview the schedule.</p>
+          )}
+        </div>
+      ) : null}
+
+      <div className="sale-summary">
+        <div className="sale-summary-row">
+          <span className="muted">
+            {sacks || 0} sack(s) × {formatPhp(Number(price || 0))}
+          </span>
+          <span>{formatPhp(total)}</span>
+        </div>
+        {paymentType === 'installment' ? (
+          <>
+            <div className="sale-summary-row">
+              <span className="muted">Down payment</span>
+              <span>{formatPhp(Number(downPayment || 0))}</span>
+            </div>
+            <div className="sale-summary-row">
+              <span className="muted">Balance</span>
+              <span>{formatPhp(installmentPreview?.financed ?? Math.max(0, total - Number(downPayment || 0)))}</span>
+            </div>
+          </>
+        ) : null}
+        <div className="sale-total-bar">
+          <span className="muted">Total</span>
+          <strong>{formatPhp(total)}</strong>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div className="app-page stack sales-page">
       <div className="page-header">
@@ -449,12 +577,10 @@ export function SalesPage() {
             and shifts
           </p>
         </div>
+        {canCreate ? <Button onClick={() => setNewSaleOpen(true)}>New sale</Button> : null}
       </div>
 
       <ChipRow>
-        <Chip active={tab === 'new'} onClick={() => setTab('new')}>
-          New sale
-        </Chip>
         <Chip active={tab === 'sales'} onClick={() => setTab('sales')}>
           Sales
         </Chip>
@@ -473,9 +599,25 @@ export function SalesPage() {
       {message ? <div className="success-banner">{message}</div> : null}
       {loading && firstLoad ? <SkeletonTable rows={5} cols={5} /> : null}
 
-      {tab === 'new' ? (
-        <Card className="new-sale-card">
-          <form className="stack" onSubmit={onSaveSale}>
+      <Modal
+        open={newSaleOpen && canCreate}
+        onClose={() => setNewSaleOpen(false)}
+        title="New sale"
+        subtitle={`${branches.find((b) => b.id === branchId)?.name ?? 'Branch'} · stock is deducted when you save`}
+        size="lg"
+        aside={newSaleAside}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setNewSaleOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="new-sale-form" disabled={!selectedSku || !customerId}>
+              Save sale & print DR
+            </Button>
+          </>
+        }
+      >
+          <form id="new-sale-form" className="stack" onSubmit={onSaveSale}>
             {canViewAll && (
               <Field label="Branch" htmlFor="sale-branch">
                 <SelectInput id="sale-branch" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
@@ -597,126 +739,13 @@ export function SalesPage() {
               </p>
             ) : null}
 
-            <div>
-              <label className="field-label">Payment</label>
-              <ChipRow>
-                <Chip active={paymentType === 'cash'} onClick={() => setPaymentType('cash')}>
-                  Cash
-                </Chip>
-                <Chip active={paymentType === 'gcash'} onClick={() => setPaymentType('gcash')}>
-                  GCash
-                </Chip>
-                <Chip active={paymentType === 'installment'} onClick={() => setPaymentType('installment')}>
-                  Installment
-                </Chip>
-              </ChipRow>
-              {paymentType === 'installment' ? (
-                <p className="faint" style={{ marginTop: 6 }}>
-                  Pay in parts · no interest · balance tracked
-                </p>
-              ) : null}
-            </div>
-
-            {paymentType === 'installment' ? (
-              <div className="stack">
-                <div className="row" style={{ alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                  <div style={{ flex: '1 1 140px' }}>
-                    <Field label="Down payment (₱)" htmlFor="down">
-                      <TextInput
-                        id="down"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        inputMode="decimal"
-                        value={downPayment}
-                        onChange={(e) => setDownPayment(e.target.value)}
-                      />
-                    </Field>
-                  </div>
-                  <div style={{ flex: '1 1 100px' }}>
-                    <Field label="Parts" htmlFor="parts">
-                      <TextInput
-                        id="parts"
-                        type="number"
-                        min="1"
-                        step="1"
-                        required
-                        value={parts}
-                        onChange={(e) => setParts(e.target.value)}
-                      />
-                    </Field>
-                  </div>
-                  <div style={{ flex: '1 1 160px' }}>
-                    <Field label="First due date" htmlFor="first-due">
-                      <TextInput
-                        id="first-due"
-                        type="date"
-                        required
-                        value={firstDueDate}
-                        onChange={(e) => setFirstDueDate(e.target.value)}
-                      />
-                    </Field>
-                  </div>
-                </div>
-                {installmentPreview ? (
-                  <div className="stack" style={{ gap: 6 }}>
-                    <p className="faint">
-                      {formatPhp(installmentPreview.financed)} financed over {installmentPreview.partCount}{' '}
-                      part(s) · 0% interest, no add-on charges
-                    </p>
-                    <Table>
-                      <thead>
-                        <tr>
-                          <th>#</th>
-                          <th>Due date</th>
-                          <th>Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {installmentPreview.rows.map((row) => (
-                          <tr key={row.sequence}>
-                            <td>{row.sequence}</td>
-                            <td>{row.dueDate ? formatDate(row.dueDate) : '—'}</td>
-                            <td>{formatPhp(row.amount)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </Table>
-                    {installmentPreview.partCount > installmentPreview.rows.length ? (
-                      <p className="faint">
-                        Showing the first {installmentPreview.rows.length} of {installmentPreview.partCount}{' '}
-                        parts.
-                      </p>
-                    ) : null}
-                  </div>
-                ) : (
-                  <p className="faint">
-                    Set a down payment below the total and the number of parts to preview the schedule.
-                  </p>
-                )}
-              </div>
-            ) : null}
-
             <Field label="Official Receipt # (optional)" htmlFor="or">
               <TextInput id="or" value={orNumber} onChange={(e) => setOrNumber(e.target.value)} />
             </Field>
 
-            <div className="sale-total-bar">
-              <span className="muted">Total</span>
-              <strong>{formatPhp(total)}</strong>
-            </div>
-
-            {canCreate ? (
-              <Button type="submit" fullWidth disabled={!selectedSku || !customerId}>
-                Save sale & print DR
-              </Button>
-            ) : (
-              <p className="muted">Your role can view sales but not create them.</p>
-            )}
             {!selectedSku ? <p className="error-banner">No SKU for this variety + sack size.</p> : null}
           </form>
-        </Card>
-      ) : null}
+      </Modal>
 
       {tab === 'sales' ? (
         <div className="stack">
