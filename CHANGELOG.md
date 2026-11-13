@@ -1,5 +1,11 @@
 # Changelog
 
+## Link previews and icons (2026-11-13)
+
+- **Share image**: `og:image` / `twitter:image` pointed at a *relative* path (`/JMG TRUCKS.jpg`) with a space in the filename, which Facebook and Messenger cannot resolve, so links showed no picture. Added `public/og-image.jpg` — a 1200×630 crop of the Kasikas/truck photo with the JMG shield and company tagline — referenced by absolute URL, plus `og:image:width/height/type/alt`, `og:url` and `og:locale`.
+- **Icons**: browser tab now uses the existing `favicon.svg` (was pointing at the square logo JPEG); added `apple-touch-icon.png` (180×180) and PNG `icon-192` / `icon-512` manifest icons, which Chrome needs for install/PWA and Android home-screen shortcuts.
+- **Note**: Facebook caches the first scrape of a URL. After deploy, run the link through `https://developers.facebook.com/tools/debug/` and click **Scrape Again** (or append `?v=2`) to see the new preview.
+
 ## No reload when returning to the browser tab (2026-11-13)
 
 - **Cause**: on `visibilitychange` → visible, `@supabase/auth-js` calls `_recoverAndRefresh()`, which re-emits **`SIGNED_IN`** with the stored session (not `TOKEN_REFRESHED`). `AuthContext` treated that as a fresh login: it refetched the profile, set `profileLoading`, and `RequireAuth` swapped the whole page tree for `SplashLoader` — so every page remounted and refetched on each tab focus.
