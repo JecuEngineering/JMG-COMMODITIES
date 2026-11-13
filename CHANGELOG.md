@@ -13,6 +13,7 @@
 
 - **Share image**: `og:image` / `twitter:image` pointed at a *relative* path (`/JMG TRUCKS.jpg`) with a space in the filename, which Facebook and Messenger cannot resolve, so links showed no picture. Added `public/og-image.jpg` — a 1200×630 crop of the Kasikas/truck photo with the JMG shield and company tagline — referenced by absolute URL, plus `og:image:width/height/type/alt`, `og:url` and `og:locale`.
 - **Icons**: browser tab now uses the existing `favicon.svg` (was pointing at the square logo JPEG); added `apple-touch-icon.png` (180×180) and PNG `icon-192` / `icon-512` manifest icons, which Chrome needs for install/PWA and Android home-screen shortcuts.
+- **Cache busting**: the share image and `apple-touch-icon` still previewed blank on Facebook because the first scrape (made before the image existed) is cached for the exact URL. `og:image` / `twitter:image` now point at `og-image.jpg?v=2` (plus `og:image:url` and a legacy `link rel="image_src"`), so a re-scrape fetches a fresh image object. The server itself already serves the 1200×630 JPEG with a 200 and `image/jpeg` to `facebookexternalhit`.
 - **Note**: Facebook caches the first scrape of a URL. After deploy, run the link through `https://developers.facebook.com/tools/debug/` and click **Scrape Again** (or append `?v=2`) to see the new preview.
 
 ## No reload when returning to the browser tab (2026-11-13)
