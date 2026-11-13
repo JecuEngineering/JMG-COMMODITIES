@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -60,15 +61,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileError, setProfileError] = useState<string | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+  // User id whose profile has already been fetched (or attempted). Focus
+  // re-notifications for the same user must not trigger another fetch.
+  const profileUserIdRef = useRef<string | null>(null)
+  const accessTokenRef = useRef<string | null>(null)
 
   const loadSession = useCallback(async (next: Session | null) => {
+    accessTokenRef.current = next?.access_token ?? null
     setSession(next)
     if (!next?.user) {
+      profileUserIdRef.current = null
       setProfile(null)
       setProfileError(null)
       setProfileLoading(false)
       return
     }
+    profileUserIdRef.current = next.user.id
     setProfileLoading(true)
     try {
       const nextProfile = await fetchProfile(next.user.id)
@@ -79,6 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : 'Your login is valid, but no employee profile is linked to this account. Ask System Admin to create or restore your profile.',
       )
     } catch (e) {
+      // Allow the next focus event to retry after a transient failure.
+      profileUserIdRef.current = null
       setProfile(null)
       setProfileError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -110,15 +120,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (event === 'INITIAL_SESSION') return
-      if (event === 'TOKEN_REFRESHED' && nextSession) {
-        setSession(nextSession)
-        return
-      }
       if (event === 'SIGNED_OUT') {
+        profileUserIdRef.current = null
+        accessTokenRef.current = null
         setSession(null)
         setProfile(null)
         setProfileError(null)
         setProfileLoading(false)
+        return
+      }
+      // Supabase re-emits SIGNED_IN with the stored session whenever a browser
+      // tab regains focus, not just on a real login. Same user + same token
+      // means nothing to do; and even a rotated token only needs a session
+      // swap — refetching the profile would flip RequireAuth back to its splash
+      // and remount every page, which is the "it always loads" symptom.
+      const nextUserId = nextSession?.user.id ?? null
+      if (!nextUserId) return
+      if (profileUserIdRef.current === nextUserId) {
+        if (nextSession && nextSession.access_token !== accessTokenRef.current) {
+          accessTokenRef.current = nextSession.access_token
+          setSession(nextSession)
+        }
         return
       }
       // Defer Supabase calls: awaiting them inside this callback can deadlock token refresh.
@@ -148,6 +170,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
     }
+    profileUserIdRef.current = null
+    accessTokenRef.current = null
     setProfile(null)
     setSession(null)
     setProfileError(null)
@@ -156,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     if (!session?.user) return
+    profileUserIdRef.current = session.user.id
     setProfileLoading(true)
     try {
       const next = await fetchProfile(session.user.id)

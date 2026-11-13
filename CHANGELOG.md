@@ -1,5 +1,11 @@
 # Changelog
 
+## No reload when returning to the browser tab (2026-11-13)
+
+- **Cause**: on `visibilitychange` → visible, `@supabase/auth-js` calls `_recoverAndRefresh()`, which re-emits **`SIGNED_IN`** with the stored session (not `TOKEN_REFRESHED`). `AuthContext` treated that as a fresh login: it refetched the profile, set `profileLoading`, and `RequireAuth` swapped the whole page tree for `SplashLoader` — so every page remounted and refetched on each tab focus.
+- **Fix**: profile loads are now keyed to the signed-in user id. Same user → the session is swapped only if the access token actually rotated; no profile fetch, no splash, no remount. A real login (new user id) still loads the profile; `SIGNED_OUT` clears the tracked id.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass.
+
 ## Landing page GSAP parallax + scroll animations, login back button (2026-11-12)
 
 - **GSAP + ScrollTrigger** (`gsap@3.15.1`, registered once in `LandingPage`): the hero photo parallaxes (`scale 1.22`, `yPercent -6 → 6`) behind copy that lifts and fades out as you scroll; the fleet photo drifts (`scale 1.2`, `yPercent -8 → 8`) inside its frame; section labels/headings/CTAs rise in on entry; feature, product and branch grids stagger in (70–80 ms per card); the inquiry, privacy and footer blocks reveal on arrival. A 3 px jade→gold **scroll-progress bar** scrubs across the top, and the sticky nav gains a shadow after 16 px of scroll.

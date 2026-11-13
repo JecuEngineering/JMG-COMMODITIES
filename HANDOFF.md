@@ -1,6 +1,6 @@
 # JMG System – Agent Handoff
 
-**Last updated:** 2026-11-12 (accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
+**Last updated:** 2026-11-13 (tab-focus reload fix; accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
 
 ## Latest pass (2026-11-12): modules + fixes
 
@@ -10,7 +10,7 @@
 - **Containers**: `container_number` column, editable container/supplier form, CSV exports.
 - **Sales**: installment down/parts/first-due-date with live 0%-interest schedule; Sales history with date filters, totals, CSV.
 - **Fund requests**: liquidation UI removed (use `/app/liquidations`); list export added.
-- **Loading**: `AuthContext` memoises `user` on scalar ids so token refresh on tab focus no longer reloads every page.
+- **Loading**: `AuthContext` memoises `user` on scalar ids and only fetches the profile when the signed-in user id changes. Supabase re-emits `SIGNED_IN` on every browser-tab focus (`_recoverAndRefresh`), which previously remounted every page behind the splash loader; it is now ignored for the same user, so returning to the tab keeps the current page and its data.
 - **Migrations to run**: `202611120013_public_site.sql`, `202611120014_branches_containers_accounts.sql`, `202611120015_liquidations.sql`.
 - **Functions to deploy**: `create-employee` (still pending) and `admin-update-user`:
   `npx supabase functions deploy create-employee --no-verify-jwt --project-ref ylpcutmsolvmloqjnwze`
