@@ -10,15 +10,23 @@ gsap.registerPlugin(ScrollTrigger)
 
 /* ─── Static data ──────────────────────────────────────────────── */
 
+const COMPANY = {
+  phone: '+63 932 305 3491',
+  phoneHref: 'tel:+639323053491',
+  viberHref: 'viber://chat?number=%2B639323053491',
+  facebookUrl: 'https://www.facebook.com/search/pages/?q=JMG%20Commodities',
+  address:
+    'Unit 4, AMari Building / Mendi Complex, Purok 4, Brgy. Mining, Angeles City, Pampanga',
+}
+
 const PRODUCTS = [
-  { name: "Mama's Best Myanmar", size: '50 kg', price: 2360, icon: '🌾' },
-  { name: "Mama's Best Myanmar", size: '25 kg', price: 1180, icon: '🌾' },
-  { name: 'Japonica', size: '25 kg', price: 1160, icon: '🍚' },
-  { name: 'Super Mama', size: '50 kg', price: 1900, icon: '🌾' },
-  { name: 'Sweet Daisy Myanmar', size: '25 kg', price: 1100, icon: '🌾' },
-  { name: 'Bambin Myanmar', size: '25 kg', price: 1130, icon: '🌾' },
-  { name: 'Jasmine Generic', size: '25 kg', price: 1270, icon: '🌾' },
-  { name: 'Camel India', size: '50 kg', price: 1900, icon: '🌾' },
+  { name: 'Kasikas', variant: 'Pure Local / Jasmine', size: '25 kg', price: 1270, icon: '🌾' },
+  { name: 'Super Mama India', variant: 'Raw White Rice', size: '50 kg', price: 1900, icon: '🌾' },
+  { name: 'Camel India', variant: 'Raw White Rice', size: '50 kg', price: 1900, icon: '🌾' },
+  { name: "Mama's Best", variant: 'Super Dinurado', size: '50 kg', price: 2360, icon: '🌾' },
+  { name: "Mama's Best", variant: 'Super Dinurado', size: '25 kg', price: 1180, icon: '🌾' },
+  { name: 'Sweet Daisy', variant: 'Special Sinandomeng', size: '25 kg', price: 1100, icon: '🌾' },
+  { name: 'Japonica', variant: 'Japanese Round Rice', size: '25 kg', price: 1160, icon: '🍚' },
 ]
 
 const PRODUCT_NAMES = Array.from(new Set(PRODUCTS.map((p) => p.name)))
@@ -41,10 +49,10 @@ function prefersReducedMotion() {
 
 const FEATURES = [
   { icon: '🏭', title: 'Licensed Supplier', desc: 'Fully licensed rice supplier and importer accredited by the NFA and DA.' },
-  { icon: '🚚', title: 'Reliable Delivery', desc: 'On-time delivery to your store, restaurant, or institution across the Philippines.' },
+  { icon: '🛒', title: 'Wholesale & Retail', desc: 'Buy by the sack for your household or by the truckload for your store, restaurant, or institution.' },
+  { icon: '🚚', title: 'Doorstep Delivery', desc: 'Door-to-door delivery through partner services such as Maxim, or pick up at any branch.' },
+  { icon: '📅', title: 'Online Booking & Reservations', desc: 'Book online and reserve stock in advance so your rice is ready when you need it.' },
   { icon: '📦', title: 'Flexible Packaging', desc: 'Available in 25 kg and 50 kg sacks to match any volume.' },
-  { icon: '🤝', title: 'Trusted Partnerships', desc: 'Serving retailers, restaurants, schools, and government agencies since 2023.' },
-  { icon: '🔍', title: 'Quality-Checked', desc: 'Every batch inspected for moisture, broken grains, and foreign matter.' },
   { icon: '💳', title: 'Flexible Terms', desc: 'Cash, GCash, bank transfer, and installment arrangements available.' },
 ]
 
@@ -60,13 +68,40 @@ interface PublicBranch {
 const FALLBACK_BRANCHES: PublicBranch[] = [
   {
     id: 'main',
-    name: 'Main branch',
-    address: 'Metro Manila, Philippines',
-    contact: 'Contact us for the exact address',
+    name: 'Angeles City · Main Office & Branch',
+    address: COMPANY.address,
+    contact: `${COMPANY.phone} (Phone / Viber)`,
+    latitude: null,
+    longitude: null,
+  },
+  {
+    id: 'cebu',
+    name: 'Cebu · Branch & Warehouse',
+    address: 'Tipolo, Mandaue City, Cebu',
+    contact: `${COMPANY.phone} (Phone / Viber)`,
+    latitude: null,
+    longitude: null,
+  },
+  {
+    id: 'bohol',
+    name: 'Bohol · Branch & Warehouse',
+    address: 'Tagbilaran, Bohol',
+    contact: `${COMPANY.phone} (Phone / Viber)`,
     latitude: null,
     longitude: null,
   },
 ]
+
+// Pilot seed rows would otherwise hide the official locations below.
+const SEED_BRANCH_NAMES = /^(main branch|cebu branch)$/i
+const SEED_BRANCH_ADDRESSES = /^(metro manila|cebu city)$/i
+
+function isPlaceholderBranch(branch: PublicBranch) {
+  return (
+    SEED_BRANCH_NAMES.test(branch.name.trim()) ||
+    SEED_BRANCH_ADDRESSES.test((branch.address ?? '').trim())
+  )
+}
 
 // A saved map pin is exact; otherwise Google resolves a full street address more
 // reliably than "branch name + address", where a generic name can match an
@@ -233,8 +268,11 @@ export function LandingPage() {
       }
 
       const { data: branchRows } = await supabase.rpc('public_branches')
-      if (!cancelled && Array.isArray(branchRows) && branchRows.length > 0) {
-        setBranches(branchRows as PublicBranch[])
+      const liveBranches = Array.isArray(branchRows)
+        ? (branchRows as PublicBranch[]).filter((b) => !isPlaceholderBranch(b))
+        : []
+      if (!cancelled && liveBranches.length > 0) {
+        setBranches(liveBranches)
       }
     })()
 
@@ -344,8 +382,9 @@ export function LandingPage() {
             Quality Rice,<br /><span>Delivered Fresh</span>
           </h1>
           <p className="pub-hero-sub">
-            JMG Commodities Inc. supplies Mama&apos;s Best, Japonica, Super Mama, Sweet Daisy, Bambin,
-            Camel and more across the Philippines — in 25 kg and 50 kg sacks.
+            JMG Commodities Inc. supplies Kasikas, Super Mama India, Camel India, Mama&apos;s Best Super
+            Dinurado, Sweet Daisy and Japonica rice — wholesale and retail, with doorstep delivery
+            nationwide.
           </p>
           <div className="pub-hero-actions">
             <a href="#contact" className="pub-btn-primary" onClick={(e) => goToSection(e, 'contact')}>Get a Quote →</a>
@@ -353,8 +392,8 @@ export function LandingPage() {
           </div>
           <div className="pub-hero-stats">
             <div className="pub-hero-stat">
-              <strong>8</strong>
-              <span>Rice products</span>
+              <strong>6</strong>
+              <span>Rice brands</span>
             </div>
             <div className="pub-hero-stat-divider" />
             <div className="pub-hero-stat">
@@ -363,8 +402,8 @@ export function LandingPage() {
             </div>
             <div className="pub-hero-stat-divider" />
             <div className="pub-hero-stat">
-              <strong>2023</strong>
-              <span>Est. year</span>
+              <strong>3</strong>
+              <span>Locations</span>
             </div>
           </div>
         </div>
@@ -407,6 +446,7 @@ export function LandingPage() {
               <div key={`${p.name}-${p.size}`} className="pub-variety-card">
                 <div className="pub-variety-icon">{p.icon}</div>
                 <div className="pub-variety-name">{p.name}</div>
+                <div className="pub-variety-variant">{p.variant}</div>
                 <div className="pub-variety-origin">{p.size} sack</div>
                 {showPrices ? (
                   <>
@@ -439,8 +479,9 @@ export function LandingPage() {
             Delivered fresh by our own trucks
           </h2>
           <p data-reveal style={{ color: 'rgba(255,255,255,0.75)', maxWidth: 500, lineHeight: 1.7, marginBottom: 24 }}>
-            Rice moves straight from our warehouse to your store, restaurant, or institution.
-            Order by the sack or by the truckload — we deliver across the Philippines.
+            Rice moves straight from our warehouses to your store, restaurant, or institution.
+            Our trucks handle bulk orders, and partner services such as Maxim bring smaller orders
+            to your doorstep.
           </p>
           <a href="#contact" className="pub-btn-primary" data-reveal style={{ background: 'var(--color-gold)', boxShadow: '0 4px 16px rgba(201,162,39,0.4)' }} onClick={(e) => goToSection(e, 'contact')}>
             Ask for a delivery quote →
@@ -454,7 +495,8 @@ export function LandingPage() {
           <p className="pub-section-label" data-reveal>Where we are</p>
           <h2 className="pub-section-title" data-reveal>Our branch locations</h2>
           <p className="pub-section-sub" data-reveal>
-            Find a JMG Commodities branch near you. Contact us for details in your area.
+            Visit our main office in Angeles City, Pampanga, or our branches and warehouses in Cebu
+            and Bohol. Delivery is available nationwide.
           </p>
           <div className="pub-branches">
             {branches.map((b) => (
@@ -485,7 +527,7 @@ export function LandingPage() {
             <div className="pub-branch-card" style={{ borderStyle: 'dashed', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 10, minHeight: 160 }}>
               <div style={{ fontSize: 32 }}>🗺️</div>
               <p style={{ fontSize: '0.9rem', color: 'var(--color-ink-soft)' }}>
-                More branches available. Send us an inquiry to find your nearest location.
+                Outside these areas? We deliver nationwide — send us an inquiry for your location.
               </p>
               <a href="#contact" className="pub-btn-primary" style={{ fontSize: '0.875rem', padding: '10px 20px' }} onClick={(e) => goToSection(e, 'contact')}>
                 Contact us
@@ -508,17 +550,33 @@ export function LandingPage() {
                 hear from you. Fill in the form and our team will reach out within one business day.
               </p>
               <div className="pub-contact-item">
-                <div className="pub-contact-item-icon">📧</div>
+                <div className="pub-contact-item-icon">📞</div>
                 <div>
-                  <h4>Email</h4>
-                  <p>Contact us via the inquiry form and we will reply to your email or phone.</p>
+                  <h4>Phone / Viber</h4>
+                  <p>
+                    <a href={COMPANY.phoneHref}>{COMPANY.phone}</a> — call or{' '}
+                    <a href={COMPANY.viberHref}>message us on Viber</a>.
+                  </p>
                 </div>
               </div>
               <div className="pub-contact-item">
-                <div className="pub-contact-item-icon">📞</div>
+                <div className="pub-contact-item-icon">💬</div>
                 <div>
-                  <h4>Phone / GCash</h4>
-                  <p>Provide your mobile number in the form and we will reach you directly.</p>
+                  <h4>Facebook</h4>
+                  <p>
+                    Send us a message on the{' '}
+                    <a href={COMPANY.facebookUrl} target="_blank" rel="noreferrer noopener">
+                      JMG Commodities Facebook Page
+                    </a>
+                    .
+                  </p>
+                </div>
+              </div>
+              <div className="pub-contact-item">
+                <div className="pub-contact-item-icon">📍</div>
+                <div>
+                  <h4>Main office</h4>
+                  <p>{COMPANY.address}</p>
                 </div>
               </div>
               <div className="pub-contact-item">
@@ -586,7 +644,7 @@ export function LandingPage() {
 
                 <div className="pub-field">
                   <label htmlFor="inq-branch">Nearest area / branch (optional)</label>
-                  <input id="inq-branch" type="text" maxLength={120} placeholder="e.g. Cebu, Davao, Metro Manila…" value={branchInterest} onChange={(e) => setBranchInterest(e.target.value)} />
+                  <input id="inq-branch" type="text" maxLength={120} placeholder="e.g. Pampanga, Cebu, Bohol…" value={branchInterest} onChange={(e) => setBranchInterest(e.target.value)} />
                 </div>
 
                 <div className="pub-field">
@@ -652,8 +710,18 @@ export function LandingPage() {
               <h3 style={{ margin: 0 }}>JMG Commodities Inc.</h3>
             </div>
             <p>
-              Licensed Philippine rice supplier and importer. Supplying quality rice — Mama&apos;s Best,
-              Japonica, Super Mama, Sweet Daisy, Bambin, Camel, and more — across the Philippines since 2023.
+              Wholesale and retail Philippine rice — Kasikas, Super Mama India, Camel India,
+              Mama&apos;s Best Super Dinurado, Sweet Daisy Special Sinandomeng, and Japonica Japanese
+              Round Rice. Main office in Angeles City, Pampanga, with branches and warehouses in
+              Cebu and Bohol.
+            </p>
+            <p style={{ marginTop: 14 }}>
+              {COMPANY.address}
+              <br />
+              <a href={COMPANY.phoneHref}>{COMPANY.phone}</a> (Phone / Viber)
+              <br />
+              <a href={COMPANY.viberHref}>Viber</a> ·{' '}
+              <a href={COMPANY.facebookUrl} target="_blank" rel="noreferrer noopener">Facebook</a>
             </p>
           </div>
           <div className="pub-footer-col">

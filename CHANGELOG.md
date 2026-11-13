@@ -1,5 +1,14 @@
 # Changelog
 
+## Official company details on the public site (2026-11-13)
+
+- **Contact**: the landing page now shows the real Phone/Viber number **+63 932 305 3491** (tap-to-call and Viber chat links), a link to the JMG Commodities Facebook Page, and the main office address — replacing “provide your number in the form” placeholders. The footer repeats the address and contact links.
+- **Locations**: built-in branch cards are now **Angeles City (main office & branch)**, **Cebu (Tipolo, Mandaue)** and **Bohol (Tagbilaran)** with maps keyed to those addresses. `seed.sql` and new migration `202611130016_company_details.sql` update the stored branch directory and `company_settings` address/contacts; the migration only replaces placeholder values, so anything already edited in Settings is kept.
+- **Products**: cards now use the official brands — Kasikas (Pure Local/Jasmine), Super Mama India and Camel India (raw white), Mama's Best Super Dinurado (50 kg and 25 kg), Sweet Daisy Special Sinandomeng, Japonica Japanese Round — with the rice type under each name. Bambin and “Myanmar” labels were removed.
+- **Services**: the features grid now leads with wholesale & retail, doorstep delivery through partner services such as Maxim, and online booking/reservations; the fleet copy explains own trucks for bulk plus partner couriers for door-to-door orders.
+- **SEO/meta**: `index.html` description, `og:description` and `twitter:description` now name the brands and Angeles City/Cebu/Bohol. Hero stats read 6 rice brands · 2 sack sizes · 3 locations.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass.
+
 ## Link previews and icons (2026-11-13)
 
 - **Share image**: `og:image` / `twitter:image` pointed at a *relative* path (`/JMG TRUCKS.jpg`) with a space in the filename, which Facebook and Messenger cannot resolve, so links showed no picture. Added `public/og-image.jpg` — a 1200×630 crop of the Kasikas/truck photo with the JMG shield and company tagline — referenced by absolute URL, plus `og:image:width/height/type/alt`, `og:url` and `og:locale`.

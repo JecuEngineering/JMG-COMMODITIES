@@ -1,6 +1,6 @@
 # JMG System – Agent Handoff
 
-**Last updated:** 2026-11-13 (tab-focus reload fix; accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
+**Last updated:** 2026-11-13 (official company details on the public site; link-preview/favicon fix; tab-focus reload fix; accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
 
 ## Latest pass (2026-11-12): modules + fixes
 
@@ -11,7 +11,7 @@
 - **Sales**: installment down/parts/first-due-date with live 0%-interest schedule; Sales history with date filters, totals, CSV.
 - **Fund requests**: liquidation UI removed (use `/app/liquidations`); list export added.
 - **Loading**: `AuthContext` memoises `user` on scalar ids and only fetches the profile when the signed-in user id changes. Supabase re-emits `SIGNED_IN` on every browser-tab focus (`_recoverAndRefresh`), which previously remounted every page behind the splash loader; it is now ignored for the same user, so returning to the tab keeps the current page and its data.
-- **Migrations to run**: `202611120013_public_site.sql`, `202611120014_branches_containers_accounts.sql`, `202611120015_liquidations.sql`.
+- **Migrations to run**: `202611120013_public_site.sql`, `202611120014_branches_containers_accounts.sql`, `202611120015_liquidations.sql`, `202611130016_company_details.sql`.
 - **Functions to deploy**: `create-employee` (still pending) and `admin-update-user`:
   `npx supabase functions deploy create-employee --no-verify-jwt --project-ref ylpcutmsolvmloqjnwze`
   `npx supabase functions deploy admin-update-user --no-verify-jwt --project-ref ylpcutmsolvmloqjnwze`
@@ -153,14 +153,15 @@ Run in order in Supabase SQL Editor:
 - `202611120013_public_site.sql` — **pending** (price toggle column, public branches RPC, inquiry limits)
 - `202611120014_branches_containers_accounts.sql` — **pending** (branch lat/lng, container number, owner/GA profile edits, coordinates in `public_branches()`)
 - `202611120015_liquidations.sql` — **pending** (`liquidations` + `liquidation_items`, RLS incl. System Admin)
+- `202611130016_company_details.sql` — **pending** (fills the placeholder company address/contacts and adds the Angeles City/Cebu/Bohol branch directory; leaves values already edited in Settings untouched)
 
-014 replaces `public_branches()` (adding latitude/longitude), so run it after 013 and the website will use exact pins once branches have coordinates set in Settings → Branches.
+014 replaces `public_branches()` (adding latitude/longitude), so run it after 013 and the website will use exact pins once branches have coordinates set in Settings → Branches. Until 013 is applied the landing page uses its built-in branch cards, which already list the three official locations.
 
 ## Phase 9 build notes
 
 - Table: `inquiries` (name, contact, message, branch_interest, status: new/read/replied/archived, reply_notes, replied_by, replied_at).
 - RLS: anonymous INSERT allowed (public can submit); authenticated staff can SELECT + UPDATE.
-- Public landing page at `/` — no auth required: hero, varieties (Kasikas Jasmine, Japonica, White, Parboiled, Glutinous), sack sizes (5/25/50 kg), why-us features, branch locations placeholder, inquiry form, footer with Staff Login link.
+- Public landing page at `/` — no auth required: hero, brand cards (Kasikas, Super Mama India, Camel India, Mama's Best Super Dinurado, Sweet Daisy Special Sinandomeng, Japonica), 25/50 kg sack sizes, services grid (wholesale/retail, Maxim doorstep delivery, online booking/reservations), Angeles City/Cebu/Bohol branch cards, Phone/Viber + Facebook + address, inquiry form, footer with Staff Login link.
 - Inquiry form calls `submitInquiry()` → `inquiries` table insert (works anon via Supabase anon key).
 - Staff Inquiries page at `/app/inquiries`: filter by status, click to open detail, auto-marks new→read, mark replied (with notes) or archive.
 - Nav item added for Owner, GA, BA, System Admin.

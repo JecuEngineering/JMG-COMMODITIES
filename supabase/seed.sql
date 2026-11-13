@@ -4,16 +4,17 @@
 
 insert into public.branches (id, name, address, contact, active)
 values
-  ('11111111-1111-1111-1111-111111111111', 'Main branch', 'Metro Manila', '0917-000-0001', true),
-  ('22222222-2222-2222-2222-222222222222', 'Cebu branch', 'Cebu City', '0917-000-0002', true)
+  ('11111111-1111-1111-1111-111111111111', 'Angeles City · Main Office & Branch', 'Unit 4, AMari Building / Mendi Complex, Purok 4, Brgy. Mining, Angeles City, Pampanga', '+63 932 305 3491 (Phone / Viber)', true),
+  ('22222222-2222-2222-2222-222222222222', 'Cebu · Branch & Warehouse', 'Tipolo, Mandaue City, Cebu', '+63 932 305 3491 (Phone / Viber)', true),
+  ('33333333-3333-3333-3333-333333333333', 'Bohol · Branch & Warehouse', 'Tagbilaran, Bohol', '+63 932 305 3491 (Phone / Viber)', true)
 on conflict (id) do nothing;
 
 update public.company_settings
 set
   name = 'JMG Commodities Inc.',
-  address = 'Philippines',
+  address = 'Unit 4, AMari Building / Mendi Complex, Purok 4, Brgy. Mining, Angeles City, Pampanga',
   tin = '000-000-000-000',
-  contacts = 'info@jmgcommodities.ph',
+  contacts = '+63 932 305 3491 (Phone / Viber)',
   dr_prefix = 'DR-MAIN'
 where id = (select id from public.company_settings order by updated_at limit 1);
 

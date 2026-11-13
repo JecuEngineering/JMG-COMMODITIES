@@ -506,6 +506,12 @@
   color: var(--color-ink);
 }
 
+.pub-variety-variant {
+  font-size: 0.8rem;
+  color: var(--color-ink-soft);
+  margin-bottom: 8px;
+}
+
 .pub-variety-origin {
   font-size: 0.75rem;
   font-weight: 600;
@@ -755,6 +761,16 @@
   line-height: 1.5;
 }
 
+.pub-contact-item p a {
+  color: var(--color-jade-dark);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pub-contact-item p a:hover {
+  text-decoration: underline;
+}
+
 .pub-form {
   position: relative;
   background: var(--color-surface);
@@ -912,6 +928,16 @@
 .pub-footer-brand p {
   font-size: 0.875rem;
   line-height: 1.65;
+}
+
+.pub-footer-brand a {
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: none;
+}
+
+.pub-footer-brand a:hover {
+  color: #fff;
+  text-decoration: underline;
 }
 
 .pub-footer-col h4 {
