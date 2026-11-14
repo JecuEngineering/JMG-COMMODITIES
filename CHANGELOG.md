@@ -1,5 +1,12 @@
 # Changelog
 
+## Dashboard showed the wrong day and counted GCash as cash (2026-11-15)
+
+- **Date**: `todayInputValue()` / `toDateInputValue()` used `toISOString()`, i.e. the **UTC** date. Between midnight and 08:00 in Manila they returned yesterday, so at 01:15 on 11/15 the dashboard labelled 11/14's ₱261,020 as “Today's sales” (header still said November 15). Both helpers now build the date from local year/month/day; existing date-only strings are passed through untouched. Price lookup, overdue installments, customer balances, container arrival date and the reports date range now use the same helper.
+- **Cash on hand**: the card summed **all** payment rows for the day, so it always equalled gross sales. It now counts `method = 'cash'` only — 11/14 reads **₱183,300.00**, with the GCash portion (₱77,720.00) left to the Sales history summary.
+- **After midnight**: the sales and cash cards now append yesterday's figures (`· yesterday ₱261,020.00` / `· yesterday ₱183,300.00`) so the just-closed day is still visible before the first sale of the new day.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass; production totals confirmed (11/14 cash 183,300.00; 11/15 cash 0.00).
+
 ## Split payments: GCash part + cash remainder (2026-11-15)
 
 - **Problem**: the Sales-In import gave each sale a single payment method taken from the day's named GCash lines, so a customer who paid partly in GCash showed as fully GCash (ROMEL 112,900) or fully cash (MARK DURBAN 8,000), and the day's cash on hand did not match the sheet. For **11/14/2026** the sheet says total 261,020.00 = GCash 77,720.00 (Mark 1,000 · Shariel 3,480 · Romel 72,700 · C/O BOSS 540) + cash on hand 183,300.00.

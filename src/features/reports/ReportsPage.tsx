@@ -7,7 +7,7 @@ import { SkeletonTable } from '../../components/Loading'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches } from '../inventory/inventoryApi'
-import { formatDate, todayInputValue } from '../../lib/dates'
+import { formatDate, toDateInputValue, todayInputValue } from '../../lib/dates'
 import { formatPhp } from '../../lib/money'
 import { canViewAllBranchesReports, canViewReports } from '../../lib/roles'
 import { supabase } from '../../lib/supabase'
@@ -90,7 +90,7 @@ export function ReportsPage() {
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date()
     d.setDate(d.getDate() - 30)
-    return d.toISOString().slice(0, 10)
+    return toDateInputValue(d)
   })
   const [toDate, setToDate] = useState(todayInputValue())
   const [error, setError] = useState<string | null>(null)

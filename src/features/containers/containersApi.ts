@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { todayInputValue } from '../../lib/dates'
 import type { Branch, Sku } from '../../types/database'
 
 export type ContainerStatus = 'in_transit' | 'arrived' | 'unloading' | 'received' | 'closed'
@@ -226,7 +227,7 @@ export async function updateContainer(input: {
 
 export async function updateContainerStatus(id: string, status: ContainerStatus) {
   const payload: Record<string, unknown> = { status }
-  if (status === 'arrived') payload.arrival_date = new Date().toISOString().slice(0, 10)
+  if (status === 'arrived') payload.arrival_date = todayInputValue()
   const { error } = await supabase.from('containers').update(payload).eq('id', id)
   if (error) throw error
 }

@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { todayInputValue } from '../../lib/dates'
 import type { Branch, Sku } from '../../types/database'
 
 export type PaymentMethod = 'cash' | 'gcash' | 'bank' | 'check' | 'installment'
@@ -120,7 +121,8 @@ export async function fetchAvailableStock(branchId: string, skuId: string): Prom
   return data ? Number(data.on_hand) : 0
 }
 
-export async function fetchCurrentPrice(skuId: string): Promise<number | null> {  const today = new Date().toISOString().slice(0, 10)
+export async function fetchCurrentPrice(skuId: string): Promise<number | null> {
+  const today = todayInputValue()
   const { data, error } = await supabase
     .from('prices')
     .select('price, effective_from')
@@ -200,7 +202,7 @@ export async function collectPayment(input: {
 }
 
 export async function fetchOverdueDues(): Promise<InstallmentDue[]> {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayInputValue()
   const { data, error } = await supabase
     .from('installment_dues')
     .select('*, plan:installment_plans(*, sale:sales(*, customer:customers(*)))')

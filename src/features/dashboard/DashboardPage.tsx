@@ -18,7 +18,7 @@ import { fetchFundBalances, type PcfFundBalance } from '../pcf/pcfApi'
 import { fetchFundRequests, type FundRequest, type FundRequestStatus } from '../fund-requests/fundRequestsApi'
 import { supabase } from '../../lib/supabase'
 import { formatPhp } from '../../lib/money'
-import { todayInputValue } from '../../lib/dates'
+import { todayInputValue, toDateInputValue } from '../../lib/dates'
 import type { Branch } from '../../types/database'
 import './dashboard.css'
 
@@ -30,6 +30,8 @@ const ACTIONABLE: Record<string, FundRequestStatus[]> = {
 
 interface PaymentRow {
   amount: number
+  method: string
+  payment_date: string
   sale: { branch_id: string } | null
 }
 
@@ -63,6 +65,7 @@ export function DashboardPage() {
   const [funds, setFunds] = useState<PcfFundBalance[]>([])
   const [fundRequests, setFundRequests] = useState<FundRequest[]>([])
   const [paymentsToday, setPaymentsToday] = useState(0)
+  const [paymentsYesterday, setPaymentsYesterday] = useState(0)
   const [overdueCount, setOverdueCount] = useState(0)
   const [nextContainer, setNextContainer] = useState<Container | null>(null)
   const [loading, setLoading] = useState(true)
@@ -76,6 +79,9 @@ export function DashboardPage() {
   useEffect(() => {
     let cancelled = false
     const today = todayInputValue()
+    const yesterdayDate = new Date()
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+    const yesterday = toDateInputValue(yesterdayDate)
     const branchFilter = branchId || null
 
     async function load() {
@@ -90,8 +96,9 @@ export function DashboardPage() {
             canViewFundRequests(role) ? fetchFundRequests() : Promise.resolve([]),
             supabase
               .from('payments')
-              .select('amount, sale:sales(branch_id)')
-              .eq('payment_date', today),
+              .select('amount, method, payment_date, sale:sales(branch_id)')
+              .in('payment_date', [today, yesterday])
+              .eq('method', 'cash'),
             canViewSales(role) ? fetchOverdueDues() : Promise.resolve([]),
             canViewContainers(role) ? fetchContainers() : Promise.resolve([]),
           ])
@@ -119,7 +126,16 @@ export function DashboardPage() {
         setBalances(balanceRows)
         setFunds(fundRows)
         setFundRequests(requestRows)
-        setPaymentsToday(todayPayments.reduce((sum, p) => sum + Number(p.amount), 0))
+        setPaymentsToday(
+          todayPayments
+            .filter((p) => p.payment_date === today)
+            .reduce((sum, p) => sum + Number(p.amount), 0),
+        )
+        setPaymentsYesterday(
+          todayPayments
+            .filter((p) => p.payment_date === yesterday)
+            .reduce((sum, p) => sum + Number(p.amount), 0),
+        )
         setOverdueCount(scopedDues.length)
         setNextContainer(upcoming[0] ?? null)
       } catch (err) {
@@ -136,6 +152,10 @@ export function DashboardPage() {
   const today = todayInputValue()
   const todayRows = sales.filter((s) => s.sale_date === today)
   const todaySales = todayRows.reduce((sum, s) => sum + Number(s.total), 0)
+  const yesterdayDate = new Date()
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+  const yesterdayRows = sales.filter((s) => s.sale_date === toDateInputValue(yesterdayDate))
+  const yesterdaySales = yesterdayRows.reduce((sum, s) => sum + Number(s.total), 0)
   const receivables = sales.reduce((sum, s) => sum + Number(s.balance), 0)
 
   const branchFunds = branchId ? funds.filter((f) => f.branch_id === branchId) : funds
@@ -279,12 +299,18 @@ export function DashboardPage() {
         <div className="dash-metric">
           <span className="dash-metric-label">Today's sales</span>
           <strong className="dash-metric-value">{loading ? '—' : formatPhp(todaySales)}</strong>
-          <span className="dash-metric-sub">{todayRows.length} sale{todayRows.length === 1 ? '' : 's'}</span>
+          <span className="dash-metric-sub">
+            {todayRows.length} sale{todayRows.length === 1 ? '' : 's'}
+            {yesterdaySales > 0 ? ` · yesterday ${formatPhp(yesterdaySales)}` : ''}
+          </span>
         </div>
         <div className="dash-metric">
           <span className="dash-metric-label">Cash on hand</span>
           <strong className="dash-metric-value">{loading ? '—' : formatPhp(paymentsToday)}</strong>
-          <span className="dash-metric-sub">From today's payments</span>
+          <span className="dash-metric-sub">
+            Cash payments only
+            {paymentsYesterday > 0 ? ` · yesterday ${formatPhp(paymentsYesterday)}` : ''}
+          </span>
         </div>
         <div className="dash-metric">
           <span className="dash-metric-label">Customer balances</span>

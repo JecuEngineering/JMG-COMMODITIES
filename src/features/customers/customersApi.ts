@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { todayInputValue } from '../../lib/dates'
 import type { Customer, PaymentMethod } from '../sales/salesApi'
 
 export interface CustomerSale {
@@ -97,7 +98,7 @@ export async function fetchCustomerAccounts(branchId?: string | null): Promise<C
     }
   }
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayInputValue()
   for (const due of (dueRes.data as DueRow[]) ?? []) {
     if (Number(due.paid_amount) >= Number(due.amount)) continue
     const customerId = due.plan?.sale?.customer_id
