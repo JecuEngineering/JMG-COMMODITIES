@@ -188,6 +188,19 @@ export function ExpensesPanel() {
     )
   }
 
+  async function openReceipt(path: string) {
+    setError(null)
+    try {
+      const { data, error: urlError } = await supabase.storage
+        .from('expense-receipts')
+        .createSignedUrl(path, 3600)
+      if (urlError) throw urlError
+      if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   return (
     <>
       {error && !formOpen ? <div className="error-banner">{error}</div> : null}
@@ -309,6 +322,7 @@ export function ExpensesPanel() {
                 <th>Category</th>
                 <th>Payee</th>
                 <th>Amount</th>
+                <th>Receipt</th>
               </tr>
             </thead>
             <tbody>
@@ -319,6 +333,15 @@ export function ExpensesPanel() {
                   <td>{ex.category?.name ?? '—'}</td>
                   <td>{ex.payee ?? '—'}</td>
                   <td>{formatPhp(ex.amount)}</td>
+                  <td>
+                    {ex.receipt_path ? (
+                      <Button variant="ghost" onClick={() => void openReceipt(ex.receipt_path!)}>
+                        View
+                      </Button>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -326,6 +349,7 @@ export function ExpensesPanel() {
               <tr>
                 <td colSpan={4}><strong>Total</strong></td>
                 <td><strong>{formatPhp(filteredTotal)}</strong></td>
+                <td />
               </tr>
             </tfoot>
           </Table>
