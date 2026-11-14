@@ -1,5 +1,13 @@
 # Changelog
 
+## Sales-In ledger import from SALES CEBU.xlsx (2026-11-15)
+
+- **Imported**: all **59 daily sheets** of the Cebu Sales-In book — **561 sales, 832 line items, 237 customers, ₱56,459,750 across 53,921 bags**, dated 2026-09-07 → 2026-11-14. Each sheet is one business day; a new sale starts where the **NAME** cell changes (invoice numbers exist on some days only, and continuation rows leave NAME blank). The payment/expense notes below or to the right of the sale block are **not** imported — those are the day's expenses already deducted from sales.
+- **Records**: migration `202611150017_sales_cebu_import.sql` added `sales.import_key` (unique per branch, so a re-run imports nothing twice) and `sale_items.source_description` (keeps the original sheet wording, e.g. “K-JASMINE 25KG”, even when mapped to a SKU). Customers were matched case-insensitively within the branch or shared customers and created when missing; the invoice no. is stored as `or_number`, the generated `IMP-…` as `dr_number`. Each sale is completed and fully paid, with one payment row carrying the sheet's method (cash/gcash/check/bank) and bank reference; a delivery receipt is written. Stock movements are intentionally **not** written for historical sales.
+- **Catalog**: 9 varieties and 16 SKUs were added for the brands in the ledger (Camel India, Super Mama India, Mama's Best, Jasmine, Sweet Daisy, Bambin, Eskaya, Buko Pandan, Used Empty Sacks) with prices taken from the latest observed price.
+- **Sales history = the Sales-In sheet**: the history table is now the ledger layout — Date, Invoice no., Name, Description, Bags, Price, Amount, Date deposit, Bank, Cheque, Cash, GCash (plus a DR button) — with carry-forward cells left blank on the second and later lines of a sale, a bold **TOTAL** footer for bags and gross, and the same 12-column layout in **Export Excel** (`.xls`, one day after another, newest first).
+- **Verification**: migration applied to production (`npx supabase db query --file … --remote=ylpcutmsolvmloqjnwze`); a second run leaves 561 sales; every one of the 59 sheets reconciles to the imported sale rows; `npx tsc -b --force` and `npx vite build` pass; ledger checked at 1440 px with all 13 columns visible.
+
 ## Desktop layout on laptops and Mac windows (2026-11-13)
 
 - **Cause**: the desktop sidebar only appeared from **900 px** wide. A MacBook browser window (or any laptop with the window not maximised) often sits below that, so the app fell back to the phone topbar, bottom tab bar and a single full-width column — the "mobile" UI on a desktop screen.

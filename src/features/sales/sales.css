@@ -116,3 +116,49 @@
 .sale-aside .sale-total-bar {
   margin-top: 6px;
 }
+
+/* ── Sales-In ledger history ──────────────────────────────── */
+.sales-ledger .ui-table th,
+.sales-ledger .ui-table td {
+  white-space: nowrap;
+  font-size: 0.82rem;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.sales-ledger .ui-table th:first-child,
+.sales-ledger .ui-table td:first-child {
+  padding-left: 16px;
+}
+
+.sales-ledger .ui-table th:last-child,
+.sales-ledger .ui-table td:last-child {
+  padding-right: 16px;
+}
+
+.sales-ledger .ui-table td:nth-child(4) {
+  white-space: normal;
+  min-width: 170px;
+}
+
+.sales-ledger .ui-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sales-ledger .ui-table .center {
+  text-align: center;
+}
+
+.sales-ledger .ui-table tr.ledger-start td {
+  border-top: 1px solid var(--color-border-strong);
+}
+
+.sales-ledger .ui-table tr.ledger-start:first-child td {
+  border-top: none;
+}
+
+.sales-ledger .ui-table tfoot td {
+  border-top: 2px solid var(--color-border-strong);
+  background: var(--color-surface-raised);
+}

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
@@ -11,7 +10,7 @@ import { useAuth } from '../auth/AuthContext'
 import { fetchBranches, fetchSkus, skuLabel } from '../inventory/inventoryApi'
 import { useCompanySettings } from '../settings/useCompanySettings'
 import { formatDate, formatDateTime, toDateInputValue, todayInputValue } from '../../lib/dates'
-import { downloadCsv } from '../../lib/export'
+import { downloadExcel } from '../../lib/export'
 import { formatPhp } from '../../lib/money'
 import { canCreateSales, canViewAllBranchesSales, canViewSales } from '../../lib/roles'
 import type { Branch, Sku, Variety } from '../../types/database'
@@ -43,6 +42,25 @@ function addDaysInput(value: string, days: number): string {
   if (Number.isNaN(d.getTime())) return ''
   d.setDate(d.getDate() + days)
   return toDateInputValue(d)
+}
+
+function formatQty(value: number): string {
+  return Number(value).toLocaleString('en-PH', { maximumFractionDigits: 3 })
+}
+
+function paymentInfo(sale: Sale) {
+  const payments = sale.payments ?? []
+  const methods = new Set(payments.map((p) => p.method))
+  if (payments.length === 0) methods.add(sale.payment_type)
+  const reference = payments.find((p) => p.reference_no)?.reference_no ?? ''
+  return {
+    date: payments[0]?.payment_date ?? '',
+    reference,
+    check: methods.has('check'),
+    cash: methods.has('cash'),
+    gcash: methods.has('gcash'),
+    bank: methods.has('bank'),
+  }
 }
 
 export function SalesPage() {
@@ -249,6 +267,24 @@ export function SalesPage() {
     return { gross, paid, balance }
   }, [filteredSales])
 
+  // Sales-In ledger order: newest day first, then the order the day was recorded.
+  const ledgerSales = useMemo(() => {
+    return [...filteredSales].sort((a, b) => {
+      const byDate = b.sale_date.localeCompare(a.sale_date)
+      if (byDate !== 0) return byDate
+      return (a.dr_number ?? '').localeCompare(b.dr_number ?? '')
+    })
+  }, [filteredSales])
+
+  const historyBags = useMemo(
+    () =>
+      ledgerSales.reduce(
+        (sum, sale) => sum + (sale.items ?? []).reduce((n, item) => n + Number(item.sacks), 0),
+        0,
+      ),
+    [ledgerSales],
+  )
+
   if (!canView) {
     return (
       <div className="app-page">
@@ -413,30 +449,33 @@ export function SalesPage() {
   }
 
   function exportSalesHistory() {
-    downloadCsv(
-      `sales-history-${todayInputValue()}.csv`,
-      [
-        'Date',
-        'DR',
-        'OR',
-        'Customer',
-        'Branch',
-        'Payment type',
-        'Total',
-        'Paid',
-        'Balance',
-      ],
-      filteredSales.map((s) => [
-        s.sale_date,
-        s.dr_number ?? '',
-        s.or_number ?? '',
-        s.customer?.name ?? '',
-        s.branch?.name ?? branches.find((b) => b.id === s.branch_id)?.name ?? '',
-        s.payment_type,
-        s.total,
-        s.amount_paid,
-        s.balance,
-      ]),
+    const rows: (string | number | null)[][] = []
+    for (const sale of ledgerSales) {
+      const pay = paymentInfo(sale)
+      const items = sale.items?.length ? sale.items : [null]
+      items.forEach((item, index) => {
+        rows.push([
+          index === 0 ? sale.sale_date : '',
+          index === 0 ? sale.or_number ?? '' : '',
+          index === 0 ? sale.customer?.name ?? '' : '',
+          item ? item.source_description || (item.sku ? skuLabel(item.sku) : '') : '',
+          item ? Number(item.sacks) : '',
+          item ? Number(item.price_per_sack) : '',
+          item ? Number(item.line_total) : '',
+          index === 0 ? pay.date : '',
+          index === 0 ? pay.reference || (pay.bank ? 'Bank transfer' : '') : '',
+          index === 0 && pay.check ? '✓' : '',
+          index === 0 && pay.cash ? '✓' : '',
+          index === 0 && pay.gcash ? '✓' : '',
+        ])
+      })
+    }
+    rows.push(['TOTAL', '', '', '', historyBags, '', historyTotals.gross, '', '', '', '', ''])
+    downloadExcel(
+      `sales-in-${todayInputValue()}.xls`,
+      'Sales-In',
+      ['DATE', 'INVOICE NO.', 'NAME', 'DESCRIPTION', 'BAGS', 'PRICE', 'AMOUNT', 'DATE DEPOSIT', 'BANK', 'CHEQUE', 'CASH', 'GCASH'],
+      rows,
     )
   }
 
@@ -784,11 +823,11 @@ export function SalesPage() {
 
           <Card
             title="Sales history"
-            subtitle={`${filteredSales.length} of ${sales.length} sale(s)`}
+            subtitle={`${ledgerSales.length} of ${sales.length} sale(s) · ${formatQty(historyBags)} bag(s)`}
             action={
-              filteredSales.length > 0 ? (
+              ledgerSales.length > 0 ? (
                 <Button variant="secondary" onClick={exportSalesHistory}>
-                  Export CSV
+                  Export Excel
                 </Button>
               ) : undefined
             }
@@ -829,51 +868,89 @@ export function SalesPage() {
               Gross {formatPhp(historyTotals.gross)} · Collected {formatPhp(historyTotals.paid)} · Balance{' '}
               {formatPhp(historyTotals.balance)}
             </p>
-            {filteredSales.length === 0 ? (
+            {ledgerSales.length === 0 ? (
               <div className="empty-state">No sales for this filter.</div>
             ) : (
-              <Table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>DR</th>
-                    <th>Customer</th>
-                    {canViewAll ? <th>Branch</th> : null}
-                    <th>Total</th>
-                    <th>Balance</th>
-                    <th>Type</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredSales.map((s) => (
-                    <tr key={s.id}>
-                      <td>{formatDate(s.sale_date)}</td>
-                      <td>{s.dr_number}</td>
-                      <td>{s.customer?.name ?? '—'}</td>
-                      {canViewAll ? (
-                        <td>{s.branch?.name ?? branches.find((b) => b.id === s.branch_id)?.name ?? '—'}</td>
-                      ) : null}
-                      <td>{formatPhp(s.total)}</td>
-                      <td>{formatPhp(s.balance)}</td>
-                      <td>
-                        <Badge>{s.payment_type}</Badge>
-                      </td>
-                      <td>
-                        <Button
-                          variant="ghost"
-                          onClick={() => {
-                            setReceiptSale(s)
-                            setTab('receipt')
-                          }}
-                        >
-                          DR
-                        </Button>
-                      </td>
+              <div className="sales-ledger">
+                <Table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Invoice no.</th>
+                      <th>Name</th>
+                      <th>Description</th>
+                      <th className="num">Bags</th>
+                      <th className="num">Price</th>
+                      <th className="num">Amount</th>
+                      <th>Date deposit</th>
+                      <th>Bank</th>
+                      <th className="center">Cheque</th>
+                      <th className="center">Cash</th>
+                      <th className="center">GCash</th>
+                      <th />
                     </tr>
-                  ))}
-                </tbody>
-              </Table>
+                  </thead>
+                  <tbody>
+                    {ledgerSales.map((sale) => {
+                      const pay = paymentInfo(sale)
+                      const items = sale.items?.length ? sale.items : [null]
+                      return items.map((item, index) => (
+                        <tr
+                          key={`${sale.id}-${item?.id ?? 'none'}`}
+                          className={index === 0 ? 'ledger-start' : undefined}
+                        >
+                          <td>{index === 0 ? formatDate(sale.sale_date) : ''}</td>
+                          <td>{index === 0 ? sale.or_number ?? '' : ''}</td>
+                          <td>{index === 0 ? sale.customer?.name ?? '—' : ''}</td>
+                          <td>
+                            {item
+                              ? item.source_description || (item.sku ? skuLabel(item.sku) : item.sku_id)
+                              : ''}
+                          </td>
+                          <td className="num">{item ? formatQty(Number(item.sacks)) : ''}</td>
+                          <td className="num">{item ? formatPhp(item.price_per_sack) : ''}</td>
+                          <td className="num">{item ? formatPhp(item.line_total) : ''}</td>
+                          <td>{index === 0 && pay.date ? formatDate(pay.date) : ''}</td>
+                          <td>{index === 0 ? pay.reference || (pay.bank ? 'Bank transfer' : '') : ''}</td>
+                          <td className="center">{index === 0 && pay.check ? '✓' : ''}</td>
+                          <td className="center">{index === 0 && pay.cash ? '✓' : ''}</td>
+                          <td className="center">{index === 0 && pay.gcash ? '✓' : ''}</td>
+                          <td>
+                            {index === 0 ? (
+                              <Button
+                                variant="ghost"
+                                onClick={() => {
+                                  setReceiptSale(sale)
+                                  setTab('receipt')
+                                }}
+                              >
+                                DR
+                              </Button>
+                            ) : (
+                              ''
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={4}>
+                        <strong>TOTAL</strong>
+                      </td>
+                      <td className="num">
+                        <strong>{formatQty(historyBags)}</strong>
+                      </td>
+                      <td />
+                      <td className="num">
+                        <strong>{formatPhp(historyTotals.gross)}</strong>
+                      </td>
+                      <td colSpan={6} />
+                    </tr>
+                  </tfoot>
+                </Table>
+              </div>
             )}
           </Card>
         </div>
@@ -975,7 +1052,7 @@ export function SalesPage() {
                 <tbody>
                   {(receiptSale.items ?? []).map((item) => (
                     <tr key={item.id}>
-                      <td>{item.sku ? skuLabel(item.sku) : item.sku_id}</td>
+                      <td>{item.source_description || (item.sku ? skuLabel(item.sku) : item.sku_id)}</td>
                       <td>{item.sacks}</td>
                       <td>{formatPhp(item.price_per_sack)}</td>
                       <td>{formatPhp(item.line_total)}</td>

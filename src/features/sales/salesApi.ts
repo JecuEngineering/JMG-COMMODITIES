@@ -44,6 +44,7 @@ export interface SaleItem {
   price_per_sack: number
   discount: number
   line_total: number
+  source_description: string | null
   sku?: Sku | null
 }
 
@@ -163,6 +164,7 @@ export async function fetchSales(branchId?: string | null): Promise<Sale[]> {
     .from('sales')
     .select('*, customer:customers(*), branch:branches(*), items:sale_items(*, sku:skus(*, variety:varieties(*))), payments(*)')
     .is('deleted_at', null)
+    .order('sale_date', { ascending: false })
     .order('created_at', { ascending: false })
   if (branchId) q = q.eq('branch_id', branchId)
   const { data, error } = await q

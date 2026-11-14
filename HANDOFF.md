@@ -1,6 +1,16 @@
 # JMG System – Agent Handoff
 
-**Last updated:** 2026-11-13 (desktop layout from 720 px with an icon rail on laptop/Mac windows; per-tab sessions ending on tab close + 5-minute idle sign-out; official company details on the public site; link-preview/favicon fix; tab-focus reload fix; accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
+**Last updated:** 2026-11-15 (Sales CEBU Sales-In ledger imported — 561 sales / 832 lines / ₱56,459,750; Sales history now mirrors the Sales-In sheet; desktop layout from 720 px with an icon rail on laptop/Mac windows; per-tab sessions ending on tab close + 5-minute idle sign-out; official company details on the public site; link-preview/favicon fix; tab-focus reload fix; accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
+
+## Sales-In ledger import (2026-11-15)
+
+- **Source**: `C:\Users\jecu2\Downloads\SALES CEBU.xlsx` — 59 sheets, one business day each. A sale starts where **NAME** changes; continuation rows leave DATE/NAME blank, and invoice numbers are only present on some days. The totals/payment notes below or to the right of each block are the day's **expenses already deducted from sales** and were deliberately not imported.
+- **Result**: 561 sales, 832 line items, 237 imported customers, ₱56,459,750 / 53,921 bags, 2026-09-07 → 2026-11-14 (cash 450 / gcash 74 / check 13 / bank 24). Everything is in branch **Cebu**.
+- **Migration** `supabase/migrations/202611150017_sales_cebu_import.sql` is **already applied to the hosted project**. It adds `sales.import_key` (partial unique index per branch — re-running imports nothing) and `sale_items.source_description` (original sheet wording). It also seeds 9 varieties / 16 SKUs with prices and ends with a call to `import_sales_ledger(branch, rows)`, a security-definer function revoked from anon/authenticated. To import another workbook, generate a new migration in the same shape with fresh `import_key`s.
+- **Mapping**: sheet NAME → customer (case-insensitive, branch or shared; created if missing), invoice → `or_number`, generated `IMP-<key>` → `dr_number`, sheet DATE → `sale_date`, one payment row per sale with the method/bank reference, delivery receipt written, balance 0. Stock movements are **not** written for historical sales.
+- **Sales history UI** (`src/features/sales/SalesPage.tsx`, `sales.css`): the history card is the Sales-In ledger — Date, Invoice no., Name, Description, Bags, Price, Amount, Date deposit, Bank, Cheque, Cash, GCash, DR — with carry-forward blanks for multi-line sales and a TOTAL footer (bags + gross). **Export Excel** writes the same layout to `.xls`. `salesApi.ts` now fetches `source_description` and orders by `sale_date` then `created_at`.
+
+## Shell responsiveness (2026-11-13)
 
 ## Shell responsiveness (2026-11-13)
 
@@ -18,7 +28,7 @@
 - **Fund requests**: liquidation UI removed (use `/app/liquidations`); list export added.
 - **Loading**: `AuthContext` memoises `user` on scalar ids and only fetches the profile when the signed-in user id changes. Supabase re-emits `SIGNED_IN` on every browser-tab focus (`_recoverAndRefresh`), which previously remounted every page behind the splash loader; it is now ignored for the same user, so returning to the tab keeps the current page and its data.
 - **Session lifetime**: the auth client uses `sessionStorage` (`src/lib/supabase.ts`), so closing the tab/browser requires a fresh login; old `localStorage` tokens are purged on load. `AuthContext` also signs out after five minutes without mouse/keyboard/touch/scroll input, re-checking on visibility change.
-- **Migrations to run**: `202611120013_public_site.sql`, `202611120014_branches_containers_accounts.sql`, `202611120015_liquidations.sql`, `202611130016_company_details.sql`.
+- **Migrations to run**: `202611120013_public_site.sql`, `202611120014_branches_containers_accounts.sql`, `202611120015_liquidations.sql`, `202611130016_company_details.sql`. (`202611150017_sales_cebu_import.sql` is **already applied** to the hosted project.)
 - **Functions to deploy**: `create-employee` (still pending) and `admin-update-user`:
   `npx supabase functions deploy create-employee --no-verify-jwt --project-ref ylpcutmsolvmloqjnwze`
   `npx supabase functions deploy admin-update-user --no-verify-jwt --project-ref ylpcutmsolvmloqjnwze`
