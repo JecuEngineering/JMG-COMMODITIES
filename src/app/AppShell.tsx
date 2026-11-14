@@ -39,7 +39,7 @@ export function AppShell() {
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     const onResize = () => {
-      if (window.innerWidth >= 900) setMenuOpen(false)
+      if (window.innerWidth >= 720) setMenuOpen(false)
     }
     window.addEventListener('resize', onResize)
     return () => {
@@ -57,7 +57,7 @@ export function AppShell() {
       <aside className="shell-sidebar" aria-label="Main navigation">
         <div className="shell-brand">
           <img src={logoSrc} alt="" className="shell-logo" />
-          <div>
+          <div className="shell-brand-text">
             <strong>{companyName}</strong>
             <p className="faint">{ROLE_LABELS[role]}</p>
           </div>
@@ -69,10 +69,11 @@ export function AppShell() {
               key={item.id}
               to={item.path}
               end={item.path === '/app'}
+              title={item.label}
               className={({ isActive }) => `shell-nav-link ${isActive ? 'active' : ''}`}
             >
-              <span style={{ fontSize: '1rem', lineHeight: 1 }}>{NAV_ICONS[item.id] ?? '·'}</span>
-              {item.label}
+              <span className="shell-nav-icon" aria-hidden="true">{NAV_ICONS[item.id] ?? '·'}</span>
+              <span className="shell-nav-label">{item.label}</span>
             </NavLink>
           ))}
         </nav>
@@ -80,8 +81,15 @@ export function AppShell() {
         <div className="shell-sidebar-footer">
           <p style={{ fontWeight: 600 }}>{user!.profile.full_name}</p>
           <p className="faint" style={{ fontSize: '0.8rem', marginTop: 2 }}>{branchLabel}</p>
-          <button type="button" className="shell-signout" onClick={() => void signOut()}>
-            Sign out
+          <button
+            type="button"
+            className="shell-signout"
+            aria-label="Sign out"
+            title="Sign out"
+            onClick={() => void signOut()}
+          >
+            <span className="shell-signout-icon" aria-hidden="true">⏻</span>
+            <span className="shell-signout-label">Sign out</span>
           </button>
         </div>
       </aside>

@@ -1,5 +1,12 @@
 # Changelog
 
+## Desktop layout on laptops and Mac windows (2026-11-13)
+
+- **Cause**: the desktop sidebar only appeared from **900 px** wide. A MacBook browser window (or any laptop with the window not maximised) often sits below that, so the app fell back to the phone topbar, bottom tab bar and a single full-width column — the "mobile" UI on a desktop screen.
+- **Fix**: the desktop shell now starts at **720 px**. From 720–1099 px the sidebar collapses to an **88 px icon rail** (logo, icon-only nav, power-icon sign-out, tooltips on hover); at **1100 px and up** it is the full 272 px sidebar with labels, branch name and text sign-out. The phone layout is now only for real phone/small-tablet widths.
+- **Implementation**: `AppShell.tsx` wraps nav labels/brand text in `.shell-nav-label`/`.shell-brand-text` and sign-out in `.shell-signout-icon`/`.shell-signout-label`, with `title`/`aria-label` on icon-only controls. `shell.css`, `tokens.css` (`--page-pad`) and `global.css` (`.app-page` bottom padding) all use the 720 px breakpoint; the new `@media (min-width: 720px) and (max-width: 1099px)` block is the icon rail.
+- **Verification**: screenshots at 700 px (phone layout as intended), 760 px and 1000 px (icon rail beside content, no topbar/bottom tabs), 1200 px (full labelled sidebar). `npx tsc -b --force` and `npx vite build` pass.
+
 ## Sign-in ends with the tab and after five idle minutes (2026-11-13)
 
 - **Session storage**: the Supabase auth client now keeps its session in `sessionStorage` instead of `localStorage`, so closing the tab or the browser ends the login and the next visit asks for the password again. Each tab has its own session; existing `localStorage` tokens from the previous build are removed on load.

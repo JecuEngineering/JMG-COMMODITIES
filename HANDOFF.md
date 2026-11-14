@@ -1,6 +1,12 @@
 # JMG System – Agent Handoff
 
-**Last updated:** 2026-11-13 (per-tab sessions ending on tab close + 5-minute idle sign-out; official company details on the public site; link-preview/favicon fix; tab-focus reload fix; accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
+**Last updated:** 2026-11-13 (desktop layout from 720 px with an icon rail on laptop/Mac windows; per-tab sessions ending on tab close + 5-minute idle sign-out; official company details on the public site; link-preview/favicon fix; tab-focus reload fix; accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
+
+## Shell responsiveness (2026-11-13)
+
+- Previewing the app in a Mac/laptop browser window showed the phone UI because the desktop breakpoint was 900 px. It is now **720 px**, so desktop screens get a sidebar even when the window is not maximised.
+- **720–1099 px**: 88 px **icon rail** — logo, icon-only nav links (labels hidden, `title` tooltip), power-icon sign-out. **≥1100 px**: full 272 px sidebar with labels, branch name and text sign-out. **<720 px**: unchanged phone topbar + bottom tabs.
+- Changing the breakpoint means: `src/app/shell.css` (desktop block + new icon-rail media query), `src/app/AppShell.tsx` (`.shell-brand-text`, `.shell-nav-icon`/`.shell-nav-label`, `.shell-signout-icon`/`.shell-signout-label`), `src/styles/tokens.css` (`--page-pad`) and `src/styles/global.css` (`.app-page` padding). Keep these four in sync if the breakpoint moves again.
 
 ## Latest pass (2026-11-12): modules + fixes
 
