@@ -93,6 +93,8 @@ export function SalesPage() {
   const [sacks, setSacks] = useState('20')
   const [price, setPrice] = useState('')
   const [paymentType, setPaymentType] = useState<PaymentMethod>('cash')
+  const [splitPayment, setSplitPayment] = useState(false)
+  const [splitGcash, setSplitGcash] = useState('')
   const [downPayment, setDownPayment] = useState('')
   const [parts, setParts] = useState('3')
   const [firstDueDate, setFirstDueDate] = useState(() => addDaysInput(todayInputValue(), 30))
@@ -285,6 +287,19 @@ export function SalesPage() {
     [ledgerSales],
   )
 
+  // Payment method totals let a day's cash be checked against the sheet's CASH ON HAND.
+  const paymentTotals = useMemo(() => {
+    const totals = { cash: 0, gcash: 0, check: 0, bank: 0 }
+    for (const sale of ledgerSales) {
+      for (const p of sale.payments ?? []) {
+        if (p.method === 'cash' || p.method === 'gcash' || p.method === 'check' || p.method === 'bank') {
+          totals[p.method] += Number(p.amount)
+        }
+      }
+    }
+    return totals
+  }, [ledgerSales])
+
   if (!canView) {
     return (
       <div className="app-page">
@@ -332,6 +347,11 @@ export function SalesPage() {
     const qty = Number(sacks)
     if (!Number.isFinite(qty) || qty <= 0) {
       setError('Enter a number of sacks greater than zero.')
+      return
+    }
+    const gcashPart = Number(splitGcash || 0)
+    if (splitPayment && (!Number.isFinite(gcashPart) || gcashPart <= 0 || gcashPart >= total)) {
+      setError('Enter a GCash amount above zero and below the sale total.')
       return
     }
     const installmentParts = Number(parts || 1)
@@ -384,6 +404,13 @@ export function SalesPage() {
         downPayment: paymentType === 'installment' ? Number(downPayment || 0) : undefined,
         installmentParts: paymentType === 'installment' ? Number(parts || 1) : undefined,
         firstDueDate: paymentType === 'installment' ? firstDueDate : undefined,
+        payments:
+          splitPayment && paymentType !== 'installment'
+            ? [
+                { method: 'gcash', amount: Math.round(gcashPart * 100) / 100 },
+                { method: 'cash', amount: Math.round((total - gcashPart) * 100) / 100 },
+              ]
+            : undefined,
       })
       const sale = await fetchSale(id)
       setReceiptSale(sale)
@@ -393,6 +420,8 @@ export function SalesPage() {
       setSacks('20')
       setOrNumber('')
       setDownPayment('')
+      setSplitGcash('')
+      setSplitPayment(false)
       await load()
     } catch (e) {
       setError(describeSaleError(e))
@@ -471,6 +500,14 @@ export function SalesPage() {
       })
     }
     rows.push(['TOTAL', '', '', '', historyBags, '', historyTotals.gross, '', '', '', '', ''])
+    rows.push(['', '', 'CASH', '', '', '', paymentTotals.cash, '', '', '', '✓', ''])
+    rows.push(['', '', 'GCASH', '', '', '', paymentTotals.gcash, '', '', '', '', '✓'])
+    if (paymentTotals.check > 0) {
+      rows.push(['', '', 'CHECK', '', '', '', paymentTotals.check, '', '', '✓', '', ''])
+    }
+    if (paymentTotals.bank > 0) {
+      rows.push(['', '', 'BANK', '', '', '', paymentTotals.bank, '', '✓', '', '', ''])
+    }
     downloadExcel(
       `sales-in-${todayInputValue()}.xls`,
       'Sales-In',
@@ -486,13 +523,40 @@ export function SalesPage() {
       <div>
         <label className="field-label">Payment *</label>
         <ChipRow>
-          <Chip active={paymentType === 'cash'} onClick={() => setPaymentType('cash')}>
+          <Chip
+            active={!splitPayment && paymentType === 'cash'}
+            onClick={() => {
+              setSplitPayment(false)
+              setPaymentType('cash')
+            }}
+          >
             Cash
           </Chip>
-          <Chip active={paymentType === 'gcash'} onClick={() => setPaymentType('gcash')}>
+          <Chip
+            active={splitPayment}
+            onClick={() => {
+              setSplitPayment(true)
+              setPaymentType('cash')
+            }}
+          >
+            Cash + GCash
+          </Chip>
+          <Chip
+            active={!splitPayment && paymentType === 'gcash'}
+            onClick={() => {
+              setSplitPayment(false)
+              setPaymentType('gcash')
+            }}
+          >
             GCash
           </Chip>
-          <Chip active={paymentType === 'installment'} onClick={() => setPaymentType('installment')}>
+          <Chip
+            active={paymentType === 'installment'}
+            onClick={() => {
+              setSplitPayment(false)
+              setPaymentType('installment')
+            }}
+          >
             Installment
           </Chip>
         </ChipRow>
@@ -500,6 +564,24 @@ export function SalesPage() {
           <p className="faint" style={{ marginTop: 6 }}>
             Pay in parts · no interest · balance tracked
           </p>
+        ) : null}
+        {splitPayment ? (
+          <div className="stack" style={{ gap: 6, marginTop: 8 }}>
+            <Field label="GCash amount (₱)" htmlFor="split-gcash">
+              <TextInput
+                id="split-gcash"
+                type="number"
+                min="0.01"
+                step="0.01"
+                inputMode="decimal"
+                value={splitGcash}
+                onChange={(e) => setSplitGcash(e.target.value)}
+              />
+            </Field>
+            <p className="faint">
+              Cash gets {formatPhp(Math.max(0, total - (Number(splitGcash) || 0)))} of {formatPhp(total)}.
+            </p>
+          </div>
         ) : null}
       </div>
 
@@ -595,6 +677,18 @@ export function SalesPage() {
             <div className="sale-summary-row">
               <span className="muted">Balance</span>
               <span>{formatPhp(installmentPreview?.financed ?? Math.max(0, total - Number(downPayment || 0)))}</span>
+            </div>
+          </>
+        ) : null}
+        {splitPayment ? (
+          <>
+            <div className="sale-summary-row">
+              <span className="muted">GCash</span>
+              <span>{formatPhp(Number(splitGcash || 0))}</span>
+            </div>
+            <div className="sale-summary-row">
+              <span className="muted">Cash</span>
+              <span>{formatPhp(Math.max(0, total - (Number(splitGcash) || 0)))}</span>
             </div>
           </>
         ) : null}
@@ -864,9 +958,14 @@ export function SalesPage() {
                 </Field>
               </div>
             </div>
-            <p className="muted" style={{ margin: '4px 0 10px' }}>
+            <p className="muted" style={{ margin: '4px 0 4px' }}>
               Gross {formatPhp(historyTotals.gross)} · Collected {formatPhp(historyTotals.paid)} · Balance{' '}
               {formatPhp(historyTotals.balance)}
+            </p>
+            <p className="muted" style={{ margin: '0 0 10px' }}>
+              Cash {formatPhp(paymentTotals.cash)} · GCash {formatPhp(paymentTotals.gcash)}
+              {paymentTotals.check > 0 ? ` · Check ${formatPhp(paymentTotals.check)}` : ''}
+              {paymentTotals.bank > 0 ? ` · Bank ${formatPhp(paymentTotals.bank)}` : ''}
             </p>
             {ledgerSales.length === 0 ? (
               <div className="empty-state">No sales for this filter.</div>

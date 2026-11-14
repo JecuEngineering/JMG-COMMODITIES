@@ -1,6 +1,6 @@
 # JMG System – Agent Handoff
 
-**Last updated:** 2026-11-15 (Sales CEBU Sales-In ledger imported — 561 sales / 832 lines / ₱56,459,750; Sales history now mirrors the Sales-In sheet; desktop layout from 720 px with an icon rail on laptop/Mac windows; per-tab sessions ending on tab close + 5-minute idle sign-out; official company details on the public site; link-preview/favicon fix; tab-focus reload fix; accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
+**Last updated:** 2026-11-15 (Split GCash + cash payments — 11/14 and 28 other sales corrected to the workbook payment block; `create_sale` accepts `p_payments`; New Sale has a Cash + GCash option; Sales CEBU Sales-In ledger imported — 561 sales / 832 lines / ₱56,459,750; Sales history now mirrors the Sales-In sheet; desktop layout from 720 px with an icon rail on laptop/Mac windows; per-tab sessions ending on tab close + 5-minute idle sign-out; official company details on the public site; link-preview/favicon fix; tab-focus reload fix; accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
 
 ## Sales-In ledger import (2026-11-15)
 
@@ -10,7 +10,14 @@
 - **Mapping**: sheet NAME → customer (case-insensitive, branch or shared; created if missing), invoice → `or_number`, generated `IMP-<key>` → `dr_number`, sheet DATE → `sale_date`, one payment row per sale with the method/bank reference, delivery receipt written, balance 0. Stock movements are **not** written for historical sales.
 - **Sales history UI** (`src/features/sales/SalesPage.tsx`, `sales.css`): the history card is the Sales-In ledger — Date, Invoice no., Name, Description, Bags, Price, Amount, Date deposit, Bank, Cheque, Cash, GCash, DR — with carry-forward blanks for multi-line sales and a TOTAL footer (bags + gross). **Export Excel** writes the same layout to `.xls`. `salesApi.ts` now fetches `source_description` and orders by `sale_date` then `created_at`.
 
-## Shell responsiveness (2026-11-13)
+## Split payments — partial GCash, cash remainder (2026-11-15)
+
+- **Why**: the workbook's payment block (below each day's sales) names only the **non-cash** receipts. A customer can therefore be partly GCash and partly cash — on 11/14/2026 MARK DURBAN paid 1,000 GCash + 7,000 cash and ROMEL paid 72,700 GCash + 40,200 cash. The first import turned those into one method per sale, which broke the day's cash on hand.
+- **Reading the block**: `GCASH PAYMENT FROM <name>` / `GCASH PAYMENT (<name>)` / `GCASH TO X (FROM Y)` = that customer's GCash part; `CHECK PAYMENT …` / `DEPOSITED TO <bank> …` = check/bank part; `C/O BOSS <amount>` = GCash; every other sale that day is cash; unnamed lump deposits are later bankings of the cash proceeds and are ignored.
+- **Migration `202611150018_sales_split_payments.sql`** (already applied): deletes and re-inserts the `payments` rows of 29 imported sales (19 splits) with the components above, keeps the original bank reference per method, sets `sales.payment_type` to the largest component, then replaces `create_sale` with a version that accepts **`p_payments jsonb default null`** — `[{ "method": "cash"|"gcash"|"bank"|"check", "amount": n, "reference": "…" }]`, must sum to the sale total (installments still use the down-payment path).
+- **11/14 result**: cash **183,300.00**, GCash **77,720.00** (Mark 1,000 · Shariel 3,480 · Romel 72,700 · C/O BOSS 540), total 261,020.00, balance 0. To re-check any day: sum `payments.amount` grouped by `method` joined to `sales` where `import_key is not null` and `sale_date = …`.
+- **UI**: `SalesPage` has a **Cash + GCash** chip (non-installment methods) with a “GCash amount (₱)” field; the cash remainder is derived and shown. History shows `Cash ₱… · GCash ₱…` and Export Excel adds CASH/GCASH (and CHECK/BANK) rows under TOTAL. `salesApi.createSale` takes `payments?: { method; amount; reference? }[]`.
+- **Not corrected / known gaps**: 36 workbook payment lines remain unmatched — the LUZ and M'CORA personal GCash accounts and unnamed lump deposits — so those days' GCash may be understated; named lines on 10/15–10/17 (LUCAS KAPUSUAN, RHINA, BING, JOYLEY) had no matching db sale and were skipped. If the owner wants these attributed, get the customer name for each GCash account.
 
 ## Shell responsiveness (2026-11-13)
 
@@ -28,7 +35,7 @@
 - **Fund requests**: liquidation UI removed (use `/app/liquidations`); list export added.
 - **Loading**: `AuthContext` memoises `user` on scalar ids and only fetches the profile when the signed-in user id changes. Supabase re-emits `SIGNED_IN` on every browser-tab focus (`_recoverAndRefresh`), which previously remounted every page behind the splash loader; it is now ignored for the same user, so returning to the tab keeps the current page and its data.
 - **Session lifetime**: the auth client uses `sessionStorage` (`src/lib/supabase.ts`), so closing the tab/browser requires a fresh login; old `localStorage` tokens are purged on load. `AuthContext` also signs out after five minutes without mouse/keyboard/touch/scroll input, re-checking on visibility change.
-- **Migrations to run**: `202611120013_public_site.sql`, `202611120014_branches_containers_accounts.sql`, `202611120015_liquidations.sql`, `202611130016_company_details.sql`. (`202611150017_sales_cebu_import.sql` is **already applied** to the hosted project.)
+- **Migrations to run**: `202611120013_public_site.sql`, `202611120014_branches_containers_accounts.sql`, `202611120015_liquidations.sql`, `202611130016_company_details.sql`. (`202611150017_sales_cebu_import.sql` and `202611150018_sales_split_payments.sql` are **already applied** to the hosted project.)
 - **Functions to deploy**: `create-employee` (still pending) and `admin-update-user`:
   `npx supabase functions deploy create-employee --no-verify-jwt --project-ref ylpcutmsolvmloqjnwze`
   `npx supabase functions deploy admin-update-user --no-verify-jwt --project-ref ylpcutmsolvmloqjnwze`

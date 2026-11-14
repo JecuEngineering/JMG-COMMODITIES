@@ -143,6 +143,7 @@ export async function createSale(input: {
   downPayment?: number
   installmentParts?: number
   firstDueDate?: string
+  payments?: { method: PaymentMethod; amount: number; reference?: string }[]
 }): Promise<string> {
   const { data, error } = await supabase.rpc('create_sale', {
     p_branch_id: input.branchId,
@@ -154,6 +155,7 @@ export async function createSale(input: {
     p_down_payment: input.downPayment ?? 0,
     p_installment_parts: input.installmentParts ?? 1,
     p_first_due_date: input.firstDueDate || null,
+    p_payments: input.payments ?? null,
   })
   if (error) throw error
   return data as string

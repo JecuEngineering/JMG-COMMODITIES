@@ -1,5 +1,14 @@
 # Changelog
 
+## Split payments: GCash part + cash remainder (2026-11-15)
+
+- **Problem**: the Sales-In import gave each sale a single payment method taken from the day's named GCash lines, so a customer who paid partly in GCash showed as fully GCash (ROMEL 112,900) or fully cash (MARK DURBAN 8,000), and the day's cash on hand did not match the sheet. For **11/14/2026** the sheet says total 261,020.00 = GCash 77,720.00 (Mark 1,000 · Shariel 3,480 · Romel 72,700 · C/O BOSS 540) + cash on hand 183,300.00.
+- **Data fix**: migration `202611150018_sales_split_payments.sql` rewrites the payment rows of **29 sales** (19 of them splits) to the components named in the workbook payment block — named `GCASH PAYMENT FROM X` lines belong to that customer's sale, `C/O BOSS` is GCash, check/bank deposits keep their method, and every other sale that day is cash. 11/14 now reconciles exactly: **cash 183,300.00 (19 rows) + GCash 77,720.00 (4 rows) = 261,020.00**, balance 0.00, and no imported sale has payment rows that disagree with its total. Applied to the hosted project.
+- **New sales can split too**: `create_sale` accepts an optional `p_payments` JSON array (`[{method, amount, reference}]`) that must add up to the sale total; each component becomes its own `payments` row, and `sales.payment_type` is set to the largest component so existing reports keep working. Called without `p_payments`, behaviour is unchanged. `salesApi.createSale` forwards `payments`.
+- **New Sale form**: when the method is Cash, GCash, Check or Bank there is a **“Cash + GCash”** chip — enter the GCash amount and the cash remainder (validated to be above zero and below the total) is shown and sent as the second component. Installments keep their existing down-payment flow.
+- **History totals**: the Sales history card now shows a second summary line — `Cash ₱… · GCash ₱…` (plus Check/Bank when present) — summed from the payment rows of the filtered sales, and **Export Excel** writes a CASH row and a GCASH row (plus CHECK/BANK when non-zero) under TOTAL.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass; the 11/14 ledger was previewed at 1440 px — ROMEL and MARK DURBAN ticked in both Cash and GCash, SHARIEL and C/O BOSS GCash only, TOTAL 455 bags / ₱261,020.00, header `Cash ₱183,300.00 · GCash ₱77,720.00`. The split RPC path was exercised in a rolled-back transaction (total 100 → cash 60 + GCash 40).
+
 ## Sales-In ledger import from SALES CEBU.xlsx (2026-11-15)
 
 - **Imported**: all **59 daily sheets** of the Cebu Sales-In book — **561 sales, 832 line items, 237 customers, ₱56,459,750 across 53,921 bags**, dated 2026-09-07 → 2026-11-14. Each sheet is one business day; a new sale starts where the **NAME** cell changes (invoice numbers exist on some days only, and continuation rows leave NAME blank). The payment/expense notes below or to the right of the sale block are **not** imported — those are the day's expenses already deducted from sales.
