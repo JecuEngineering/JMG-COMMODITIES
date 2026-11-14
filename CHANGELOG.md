@@ -1,5 +1,11 @@
 # Changelog
 
+## Sign-in ends with the tab and after five idle minutes (2026-11-13)
+
+- **Session storage**: the Supabase auth client now keeps its session in `sessionStorage` instead of `localStorage`, so closing the tab or the browser ends the login and the next visit asks for the password again. Each tab has its own session; existing `localStorage` tokens from the previous build are removed on load.
+- **Idle timeout**: `AuthContext` tracks keyboard, mouse, touch, wheel and scroll activity. After **5 minutes with no input** it calls `signOut()` (server sign-out, local fallback). Background tabs are re-checked on `visibilitychange` because browsers throttle timers.
+- **Token handling**: `autoRefreshToken` still rotates the access token while the tab is open; the cached session is dropped on sign-out so no stale token can be reused.
+
 ## Official company details on the public site (2026-11-13)
 
 - **Contact**: the landing page now shows the real Phone/Viber number **+63 932 305 3491** (tap-to-call and Viber chat links), a link to the JMG Commodities Facebook Page, and the main office address — replacing “provide your number in the form” placeholders. The footer repeats the address and contact links.

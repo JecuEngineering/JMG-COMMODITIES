@@ -1,6 +1,6 @@
 # JMG System – Agent Handoff
 
-**Last updated:** 2026-11-13 (official company details on the public site; link-preview/favicon fix; tab-focus reload fix; accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
+**Last updated:** 2026-11-13 (per-tab sessions ending on tab close + 5-minute idle sign-out; official company details on the public site; link-preview/favicon fix; tab-focus reload fix; accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
 
 ## Latest pass (2026-11-12): modules + fixes
 
@@ -11,6 +11,7 @@
 - **Sales**: installment down/parts/first-due-date with live 0%-interest schedule; Sales history with date filters, totals, CSV.
 - **Fund requests**: liquidation UI removed (use `/app/liquidations`); list export added.
 - **Loading**: `AuthContext` memoises `user` on scalar ids and only fetches the profile when the signed-in user id changes. Supabase re-emits `SIGNED_IN` on every browser-tab focus (`_recoverAndRefresh`), which previously remounted every page behind the splash loader; it is now ignored for the same user, so returning to the tab keeps the current page and its data.
+- **Session lifetime**: the auth client uses `sessionStorage` (`src/lib/supabase.ts`), so closing the tab/browser requires a fresh login; old `localStorage` tokens are purged on load. `AuthContext` also signs out after five minutes without mouse/keyboard/touch/scroll input, re-checking on visibility change.
 - **Migrations to run**: `202611120013_public_site.sql`, `202611120014_branches_containers_accounts.sql`, `202611120015_liquidations.sql`, `202611130016_company_details.sql`.
 - **Functions to deploy**: `create-employee` (still pending) and `admin-update-user`:
   `npx supabase functions deploy create-employee --no-verify-jwt --project-ref ylpcutmsolvmloqjnwze`

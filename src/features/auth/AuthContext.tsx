@@ -26,6 +26,10 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+const IDLE_TIMEOUT_MS = 5 * 60_000
+const IDLE_CHECK_MS = 20_000
+const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel', 'scroll'] as const
+
 function describeAuthError(message: string): string {
   const text = message.toLowerCase()
   if (text.includes('invalid login credentials')) return 'Email or password is incorrect.'
@@ -200,6 +204,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // would make every page reload its data and flash a skeleton.
   const userId = session?.user.id ?? null
   const userEmail = session?.user.email
+
+  // Sign the operator out after five minutes without keyboard, mouse, or touch
+  // input. Background timers are throttled, so a hidden tab is also checked as
+  // soon as it becomes visible again.
+  useEffect(() => {
+    if (!userId) return
+    let lastActivity = Date.now()
+    let signedOut = false
+
+    const touch = () => {
+      lastActivity = Date.now()
+    }
+
+    const checkIdle = () => {
+      if (signedOut || Date.now() - lastActivity < IDLE_TIMEOUT_MS) return
+      signedOut = true
+      void signOut()
+    }
+
+    for (const event of ACTIVITY_EVENTS) {
+      window.addEventListener(event, touch, { passive: true, capture: true })
+    }
+    document.addEventListener('visibilitychange', checkIdle)
+    const timer = window.setInterval(checkIdle, IDLE_CHECK_MS)
+
+    return () => {
+      for (const event of ACTIVITY_EVENTS) {
+        window.removeEventListener(event, touch, { capture: true })
+      }
+      document.removeEventListener('visibilitychange', checkIdle)
+      window.clearInterval(timer)
+    }
+  }, [userId, signOut])
   const user = useMemo<SessionUser | null>(() => {
     if (!userId || !profile) return null
     return {

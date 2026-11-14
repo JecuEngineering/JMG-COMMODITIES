@@ -13,8 +13,23 @@ if (!isSupabaseConfigured) {
   )
 }
 
+// The staff system must not stay signed in after the tab or browser closes.
+// sessionStorage is per-tab and cleared by the browser, unlike localStorage,
+// which is shared and survives restarts.
+try {
+  for (let i = window.localStorage.length - 1; i >= 0; i--) {
+    const key = window.localStorage.key(i)
+    if (key?.startsWith('sb-') && key.includes('-auth-token')) {
+      window.localStorage.removeItem(key)
+    }
+  }
+} catch {
+  // Private mode or blocked storage: nothing to migrate.
+}
+
 export const supabase = createClient(url ?? 'https://placeholder.supabase.co', anonKey ?? 'placeholder', {
   auth: {
+    storage: window.sessionStorage,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
