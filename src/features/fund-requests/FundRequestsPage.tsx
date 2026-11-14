@@ -5,6 +5,7 @@ import { Chip, ChipRow } from '../../components/Chip'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate, todayInputValue } from '../../lib/dates'
@@ -143,6 +144,8 @@ export function FundRequestsPage() {
         return requests
     }
   }, [requests, tab, user, canViewAll, profileBranchId])
+
+  const pager = usePaged(filtered, 10)
 
   if (!canView) {
     return (
@@ -405,7 +408,7 @@ export function FundRequestsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
+              {pager.pageItems.map((r) => (
                 <tr
                   key={r.id}
                   onClick={() => setSelectedId(r.id)}
@@ -427,6 +430,17 @@ export function FundRequestsPage() {
             </tbody>
           </Table>
         )}
+        <Pagination
+          page={pager.page}
+          pageCount={pager.pageCount}
+          pageSize={pager.pageSize}
+          total={pager.total}
+          start={pager.start}
+          end={pager.end}
+          onPage={pager.setPage}
+          onPageSize={pager.setPageSize}
+          noun="request"
+        />
       </Card>
 
       {selected ? (

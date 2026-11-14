@@ -5,6 +5,7 @@ import { Card } from '../../components/Card'
 import { Field, SelectInput, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { writeAuditLog } from '../../lib/audit'
@@ -111,6 +112,8 @@ export function EmployeesPage() {
   useEffect(() => {
     if (canView) void load()
   }, [canView, load])
+
+  const employeePager = usePaged(employees, 10)
 
   if (!canView) {
     return (
@@ -446,7 +449,7 @@ export function EmployeesPage() {
               </tr>
             </thead>
             <tbody>
-              {employees.map((emp) => (
+              {employeePager.pageItems.map((emp) => (
                 <tr key={emp.id}>
                   <td>
                     <strong>{emp.full_name}</strong>
@@ -479,6 +482,17 @@ export function EmployeesPage() {
             </tbody>
           </Table>
         )}
+        <Pagination
+          page={employeePager.page}
+          pageCount={employeePager.pageCount}
+          pageSize={employeePager.pageSize}
+          total={employeePager.total}
+          start={employeePager.start}
+          end={employeePager.end}
+          onPage={employeePager.setPage}
+          onPageSize={employeePager.setPageSize}
+          noun="employee"
+        />
       </Card>
     </div>
   )

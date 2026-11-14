@@ -3,9 +3,11 @@ import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
+import { DateInput } from '../../components/DateInput'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches, fetchSkus, skuLabel } from '../inventory/inventoryApi'
@@ -134,6 +136,10 @@ export function ContainersPage() {
     0,
   )
   const payTarget = openPurchases.find((p) => p.id === payPurchaseId) ?? openPurchases[0] ?? null
+
+  const containerPager = usePaged(containers, 10)
+  const purchasePager = usePaged(purchases, 10)
+  const supplierPager = usePaged(suppliers, 10)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -502,7 +508,7 @@ export function ContainersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {suppliers.map((s) => (
+                  {supplierPager.pageItems.map((s) => (
                     <tr key={s.id}>
                       <td>{s.name}</td>
                       <td>{s.contact ?? '—'}</td>
@@ -512,6 +518,17 @@ export function ContainersPage() {
                 </tbody>
               </Table>
             )}
+            <Pagination
+              page={supplierPager.page}
+              pageCount={supplierPager.pageCount}
+              pageSize={supplierPager.pageSize}
+              total={supplierPager.total}
+              start={supplierPager.start}
+              end={supplierPager.end}
+              onPage={supplierPager.setPage}
+              onPageSize={supplierPager.setPageSize}
+              noun="supplier"
+            />
           </Card>
         </div>
       ) : null}
@@ -551,7 +568,7 @@ export function ContainersPage() {
                 </SelectInput>
               </Field>
               <Field label="Date" htmlFor="pur-date">
-                <TextInput id="pur-date" type="date" value={purDate} onChange={(e) => setPurDate(e.target.value)} />
+                <DateInput id="pur-date" value={purDate} onChange={setPurDate} />
               </Field>
               <Field label="Total (₱)" htmlFor="pur-total">
                 <TextInput
@@ -661,7 +678,7 @@ export function ContainersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {purchases.map((p) => (
+                  {purchasePager.pageItems.map((p) => (
                     <tr key={p.id}>
                       <td>{formatDate(p.purchase_date)}</td>
                       <td>{p.supplier?.name ?? '—'}</td>
@@ -678,6 +695,17 @@ export function ContainersPage() {
                 </tbody>
               </Table>
             )}
+            <Pagination
+              page={purchasePager.page}
+              pageCount={purchasePager.pageCount}
+              pageSize={purchasePager.pageSize}
+              total={purchasePager.total}
+              start={purchasePager.start}
+              end={purchasePager.end}
+              onPage={purchasePager.setPage}
+              onPageSize={purchasePager.setPageSize}
+              noun="purchase"
+            />
           </Card>
         </div>
       ) : null}
@@ -732,7 +760,7 @@ export function ContainersPage() {
                   <TextInput id="c-origin" value={cOrigin} onChange={(e) => setCOrigin(e.target.value)} />
                 </Field>
                 <Field label="Expected arrival" htmlFor="c-eta">
-                  <TextInput id="c-eta" type="date" value={cEta} onChange={(e) => setCEta(e.target.value)} />
+                  <DateInput id="c-eta" value={cEta} onChange={setCEta} />
                 </Field>
                 <Field label="Primary branch" htmlFor="c-branch">
                   <SelectInput id="c-branch" required value={cBranch} onChange={(e) => setCBranch(e.target.value)}>
@@ -797,7 +825,7 @@ export function ContainersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {containers.map((c) => (
+                  {containerPager.pageItems.map((c) => (
                     <tr key={c.id}>
                       <td>{c.container_number || '—'}</td>
                       <td>{c.supplier_ref}</td>
@@ -826,6 +854,17 @@ export function ContainersPage() {
                 </tbody>
               </Table>
             )}
+            <Pagination
+              page={containerPager.page}
+              pageCount={containerPager.pageCount}
+              pageSize={containerPager.pageSize}
+              total={containerPager.total}
+              start={containerPager.start}
+              end={containerPager.end}
+              onPage={containerPager.setPage}
+              onPageSize={containerPager.setPageSize}
+              noun="container"
+            />
           </Card>
 
           {selected ? (
@@ -903,7 +942,7 @@ export function ContainersPage() {
                         <TextInput id="e-origin" value={eOrigin} onChange={(e) => setEOrigin(e.target.value)} />
                       </Field>
                       <Field label="Expected arrival" htmlFor="e-eta">
-                        <TextInput id="e-eta" type="date" value={eEta} onChange={(e) => setEEta(e.target.value)} />
+                        <DateInput id="e-eta" value={eEta} onChange={setEEta} />
                       </Field>
                       <Field label="Primary branch" htmlFor="e-branch">
                         <SelectInput id="e-branch" value={eBranch} onChange={(e) => setEBranch(e.target.value)}>

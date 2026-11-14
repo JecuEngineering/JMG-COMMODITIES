@@ -3,9 +3,11 @@ import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
+import { DateInput } from '../../components/DateInput'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchFundRequests, type FundRequest } from '../fund-requests/fundRequestsApi'
@@ -119,6 +121,9 @@ export function LiquidationsPage() {
     [openRequests],
   )
 
+  const openPager = usePaged(openRequests, 10)
+  const submittedPager = usePaged(submitted, 10)
+
   if (!canView) {
     return (
       <div className="app-page">
@@ -155,6 +160,10 @@ export function LiquidationsPage() {
     event.preventDefault()
     if (!selected || !canPrepare || selected.status !== 'draft') return
     const amount = Number(itemAmount)
+    if (!itemDate) {
+      setError('Choose the date of the expense.')
+      return
+    }
     if (!itemDesc.trim()) {
       setError('Enter what the money was spent on.')
       return
@@ -338,7 +347,7 @@ export function LiquidationsPage() {
                 </tr>
               </thead>
               <tbody>
-                {openRequests.map((r) => {
+                {openPager.pageItems.map((r) => {
                   const liquidation = byRequest.get(r.id)
                   const spent = liquidationItemTotal(liquidation?.items)
                   return (
@@ -370,6 +379,17 @@ export function LiquidationsPage() {
               </tbody>
             </Table>
           )}
+          <Pagination
+            page={openPager.page}
+            pageCount={openPager.pageCount}
+            pageSize={openPager.pageSize}
+            total={openPager.total}
+            start={openPager.start}
+            end={openPager.end}
+            onPage={openPager.setPage}
+            onPageSize={openPager.setPageSize}
+            noun="advance"
+          />
         </Card>
       ) : (
         <Card title="Submitted liquidations" subtitle={`${submitted.length} record(s)`}>
@@ -395,7 +415,7 @@ export function LiquidationsPage() {
                 </tr>
               </thead>
               <tbody>
-                {submitted.map((l) => {
+                {submittedPager.pageItems.map((l) => {
                   const spent = liquidationItemTotal(l.items)
                   const variance = Number(l.requested_amount) - spent - Number(l.returned_amount)
                   return (
@@ -418,6 +438,17 @@ export function LiquidationsPage() {
               </tbody>
             </Table>
           )}
+          <Pagination
+            page={submittedPager.page}
+            pageCount={submittedPager.pageCount}
+            pageSize={submittedPager.pageSize}
+            total={submittedPager.total}
+            start={submittedPager.start}
+            end={submittedPager.end}
+            onPage={submittedPager.setPage}
+            onPageSize={submittedPager.setPageSize}
+            noun="liquidation"
+          />
         </Card>
       )}
 
@@ -532,12 +563,10 @@ export function LiquidationsPage() {
                 <div className="row" style={{ alignItems: 'flex-end', flexWrap: 'wrap' }}>
                   <div style={{ flex: 1, minWidth: 140 }}>
                     <Field label="Date" htmlFor="liq-date">
-                      <TextInput
+                      <DateInput
                         id="liq-date"
-                        type="date"
-                        required
                         value={itemDate}
-                        onChange={(e) => setItemDate(e.target.value)}
+                        onChange={setItemDate}
                       />
                     </Field>
                   </div>

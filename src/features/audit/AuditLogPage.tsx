@@ -4,6 +4,7 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Field, SelectInput, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { canViewAuditLog } from '../../lib/roles'
@@ -94,6 +95,8 @@ export function AuditLogPage() {
       return haystack.includes(needle)
     })
   }, [rows, tableFilter, actionFilter, search, nameById])
+
+  const pager = usePaged(filtered, 10)
 
   function onExport() {
     downloadCsv(
@@ -186,7 +189,7 @@ export function AuditLogPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.slice(0, 200).map((row) => (
+              {pager.pageItems.map((row) => (
                 <tr key={row.id}>
                   <td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(row.created_at)}</td>
                   <td>{row.user_id ? nameById.get(row.user_id) ?? 'Unknown user' : 'System'}</td>
@@ -209,6 +212,19 @@ export function AuditLogPage() {
             </tbody>
           </Table>
         )}
+        {filtered.length > 0 ? (
+          <Pagination
+            page={pager.page}
+            pageCount={pager.pageCount}
+            pageSize={pager.pageSize}
+            total={pager.total}
+            start={pager.start}
+            end={pager.end}
+            onPage={pager.setPage}
+            onPageSize={pager.setPageSize}
+            noun="entry"
+          />
+        ) : null}
       </Card>
     </div>
   )

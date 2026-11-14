@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
-import { Field, SelectInput, TextInput } from '../../components/Field'
+import { DateInput } from '../../components/DateInput'
+import { Field, SelectInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches } from '../inventory/inventoryApi'
@@ -191,6 +193,10 @@ export function ReportsPage() {
     [sales],
   )
 
+  const salesPager = usePaged(sales, 10)
+  const receivablePager = usePaged(receivableRows, 10)
+  const marginPager = usePaged(marginRows, 10)
+
   if (!canView) {
     return (
       <div className="app-page">
@@ -271,10 +277,10 @@ export function ReportsPage() {
             </Field>
           ) : null}
           <Field label="From" htmlFor="rep-from">
-            <TextInput id="rep-from" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+            <DateInput id="rep-from" value={fromDate} onChange={setFromDate} />
           </Field>
           <Field label="To" htmlFor="rep-to">
-            <TextInput id="rep-to" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+            <DateInput id="rep-to" value={toDate} onChange={setToDate} />
           </Field>
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
             <Button onClick={() => void load()}>Refresh</Button>
@@ -364,7 +370,7 @@ export function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sales.map((s) => (
+                  {salesPager.pageItems.map((s) => (
                     <tr key={s.id}>
                       <td>{formatDate(s.sale_date)}</td>
                       <td>{s.branch?.name ?? '—'}</td>
@@ -379,6 +385,17 @@ export function ReportsPage() {
                 </tbody>
               </Table>
             )}
+            <Pagination
+              page={salesPager.page}
+              pageCount={salesPager.pageCount}
+              pageSize={salesPager.pageSize}
+              total={salesPager.total}
+              start={salesPager.start}
+              end={salesPager.end}
+              onPage={salesPager.setPage}
+              onPageSize={salesPager.setPageSize}
+              noun="sale"
+            />
           </Card>
           <div className="no-print row" style={{ gap: 8 }}>
             <Button variant="secondary" onClick={exportSalesCsv}>
@@ -409,7 +426,7 @@ export function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {receivableRows.map((s) => (
+                  {receivablePager.pageItems.map((s) => (
                     <tr key={s.id}>
                       <td>{formatDate(s.sale_date)}</td>
                       <td>{s.dr_number ?? '—'}</td>
@@ -422,6 +439,17 @@ export function ReportsPage() {
                 </tbody>
               </Table>
             )}
+            <Pagination
+              page={receivablePager.page}
+              pageCount={receivablePager.pageCount}
+              pageSize={receivablePager.pageSize}
+              total={receivablePager.total}
+              start={receivablePager.start}
+              end={receivablePager.end}
+              onPage={receivablePager.setPage}
+              onPageSize={receivablePager.setPageSize}
+              noun="receivable"
+            />
           </Card>
           <div className="no-print row" style={{ gap: 8 }}>
             <Button variant="secondary" onClick={exportReceivablesCsv}>
@@ -449,7 +477,7 @@ export function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {marginRows.map((m) => (
+                  {marginPager.pageItems.map((m) => (
                     <tr key={m.variety}>
                       <td>{m.variety}</td>
                       <td>{m.sacks}</td>
@@ -459,6 +487,17 @@ export function ReportsPage() {
                 </tbody>
               </Table>
             )}
+            <Pagination
+              page={marginPager.page}
+              pageCount={marginPager.pageCount}
+              pageSize={marginPager.pageSize}
+              total={marginPager.total}
+              start={marginPager.start}
+              end={marginPager.end}
+              onPage={marginPager.setPage}
+              onPageSize={marginPager.setPageSize}
+              noun="variety"
+            />
           </Card>
           <div className="no-print row" style={{ gap: 8 }}>
             <Button variant="secondary" onClick={exportMarginCsv}>

@@ -5,6 +5,7 @@ import { Card } from '../../components/Card'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches } from '../inventory/inventoryApi'
@@ -98,6 +99,8 @@ export function CustomersPage() {
     }),
     [accounts],
   )
+
+  const customerPager = usePaged(filtered, 10)
 
   if (!canView) {
     return (
@@ -383,7 +386,7 @@ export function CustomersPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((a) => (
+              {customerPager.pageItems.map((a) => (
                 <tr key={a.customer.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedId(a.customer.id)}>
                   <td>
                     <strong>{a.customer.name}</strong>
@@ -419,6 +422,17 @@ export function CustomersPage() {
             </tbody>
           </Table>
         )}
+        <Pagination
+          page={customerPager.page}
+          pageCount={customerPager.pageCount}
+          pageSize={customerPager.pageSize}
+          total={customerPager.total}
+          start={customerPager.start}
+          end={customerPager.end}
+          onPage={customerPager.setPage}
+          onPageSize={customerPager.setPageSize}
+          noun="customer"
+        />
       </Card>
 
       {selected ? (

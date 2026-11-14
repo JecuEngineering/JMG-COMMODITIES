@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
+import { Combobox } from '../../components/Combobox'
+import { DateInput } from '../../components/DateInput'
 import { Field, SelectInput, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches, fetchSkus, skuLabel } from '../inventory/inventoryApi'
@@ -52,14 +55,10 @@ function paymentInfo(sale: Sale) {
   const payments = sale.payments ?? []
   const methods = new Set(payments.map((p) => p.method))
   if (payments.length === 0) methods.add(sale.payment_type)
-  const reference = payments.find((p) => p.reference_no)?.reference_no ?? ''
   return {
-    date: payments[0]?.payment_date ?? '',
-    reference,
     check: methods.has('check'),
     cash: methods.has('cash'),
     gcash: methods.has('gcash'),
-    bank: methods.has('bank'),
   }
 }
 
@@ -99,8 +98,8 @@ export function SalesPage() {
   const [parts, setParts] = useState('3')
   const [firstDueDate, setFirstDueDate] = useState(() => addDaysInput(todayInputValue(), 30))
   const [orNumber, setOrNumber] = useState('')
+  const [drNumber, setDrNumber] = useState('')
   const [receiptSale, setReceiptSale] = useState<Sale | null>(null)
-  const [customerQuery, setCustomerQuery] = useState('')
   const [salesQuery, setSalesQuery] = useState('')
   const [historyFrom, setHistoryFrom] = useState('')
   const [historyTo, setHistoryTo] = useState('')
@@ -181,7 +180,7 @@ export function SalesPage() {
       .then((rows) => {
         if (cancelled) return
         setCustomers(rows)
-        setCustomerId((prev) => (rows.some((c) => c.id === prev) ? prev : rows[0]?.id ?? ''))
+        setCustomerId((prev) => (rows.some((c) => c.id === prev) ? prev : ''))
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
@@ -210,16 +209,10 @@ export function SalesPage() {
     }
   }, [branchId, selectedSku])
 
-  const filteredCustomers = useMemo(() => {
-    const q = customerQuery.trim().toLowerCase()
-    if (!q) return customers
-    return customers.filter(
-      (c) =>
-        c.id === customerId ||
-        c.name.toLowerCase().includes(q) ||
-        (c.contact ?? '').toLowerCase().includes(q),
-    )
-  }, [customers, customerId, customerQuery])
+  const customerOptions = useMemo(
+    () => customers.map((c) => ({ value: c.id, label: c.name, meta: c.contact ?? undefined })),
+    [customers],
+  )
 
   const installmentPreview = useMemo(() => {
     if (paymentType !== 'installment') return null
@@ -289,16 +282,19 @@ export function SalesPage() {
 
   // Payment method totals let a day's cash be checked against the sheet's CASH ON HAND.
   const paymentTotals = useMemo(() => {
-    const totals = { cash: 0, gcash: 0, check: 0, bank: 0 }
+    const totals = { cash: 0, gcash: 0, check: 0 }
     for (const sale of ledgerSales) {
       for (const p of sale.payments ?? []) {
-        if (p.method === 'cash' || p.method === 'gcash' || p.method === 'check' || p.method === 'bank') {
+        if (p.method === 'cash' || p.method === 'gcash' || p.method === 'check') {
           totals[p.method] += Number(p.amount)
         }
       }
     }
     return totals
   }, [ledgerSales])
+
+  const ledgerPager = usePaged(ledgerSales, 10)
+  const overduePager = usePaged(overdue, 10)
 
   if (!canView) {
     return (
@@ -401,6 +397,7 @@ export function SalesPage() {
           },
         ],
         orNumber: orNumber || undefined,
+        drNumber: drNumber || undefined,
         downPayment: paymentType === 'installment' ? Number(downPayment || 0) : undefined,
         installmentParts: paymentType === 'installment' ? Number(parts || 1) : undefined,
         firstDueDate: paymentType === 'installment' ? firstDueDate : undefined,
@@ -419,6 +416,7 @@ export function SalesPage() {
       setTab('receipt')
       setSacks('20')
       setOrNumber('')
+      setDrNumber('')
       setDownPayment('')
       setSplitGcash('')
       setSplitPayment(false)
@@ -491,27 +489,23 @@ export function SalesPage() {
           item ? Number(item.sacks) : '',
           item ? Number(item.price_per_sack) : '',
           item ? Number(item.line_total) : '',
-          index === 0 ? pay.date : '',
-          index === 0 ? pay.reference || (pay.bank ? 'Bank transfer' : '') : '',
           index === 0 && pay.check ? '✓' : '',
           index === 0 && pay.cash ? '✓' : '',
           index === 0 && pay.gcash ? '✓' : '',
+          index === 0 ? sale.dr_number ?? '' : '',
         ])
       })
     }
-    rows.push(['TOTAL', '', '', '', historyBags, '', historyTotals.gross, '', '', '', '', ''])
-    rows.push(['', '', 'CASH', '', '', '', paymentTotals.cash, '', '', '', '✓', ''])
-    rows.push(['', '', 'GCASH', '', '', '', paymentTotals.gcash, '', '', '', '', '✓'])
+    rows.push(['TOTAL', '', '', '', historyBags, '', historyTotals.gross, '', '', '', ''])
+    rows.push(['', '', 'CASH', '', '', '', paymentTotals.cash, '', '✓', '', ''])
+    rows.push(['', '', 'GCASH', '', '', '', paymentTotals.gcash, '', '', '✓', ''])
     if (paymentTotals.check > 0) {
-      rows.push(['', '', 'CHECK', '', '', '', paymentTotals.check, '', '', '✓', '', ''])
-    }
-    if (paymentTotals.bank > 0) {
-      rows.push(['', '', 'BANK', '', '', '', paymentTotals.bank, '', '✓', '', '', ''])
+      rows.push(['', '', 'CHECK', '', '', '', paymentTotals.check, '✓', '', '', ''])
     }
     downloadExcel(
       `sales-in-${todayInputValue()}.xls`,
       'Sales-In',
-      ['DATE', 'INVOICE NO.', 'NAME', 'DESCRIPTION', 'BAGS', 'PRICE', 'AMOUNT', 'DATE DEPOSIT', 'BANK', 'CHEQUE', 'CASH', 'GCASH'],
+      ['DATE', 'INVOICE NO.', 'NAME', 'DESCRIPTION', 'BAGS', 'PRICE', 'AMOUNT', 'CHEQUE', 'CASH', 'GCASH', 'DR NO.'],
       rows,
     )
   }
@@ -617,13 +611,7 @@ export function SalesPage() {
             </div>
           </div>
           <Field label="First due date" htmlFor="first-due">
-            <TextInput
-              id="first-due"
-              type="date"
-              form="new-sale-form"
-              value={firstDueDate}
-              onChange={(e) => setFirstDueDate(e.target.value)}
-            />
+            <DateInput id="first-due" value={firstDueDate} onChange={setFirstDueDate} />
           </Field>
           {installmentPreview ? (
             <div className="stack" style={{ gap: 6 }}>
@@ -763,34 +751,16 @@ export function SalesPage() {
               </Field>
             )}
 
-            <Field label="Find customer" htmlFor="sale-customer-filter">
-              <TextInput
-                id="sale-customer-filter"
-                value={customerQuery}
-                onChange={(e) => setCustomerQuery(e.target.value)}
-                placeholder="Search name or contact"
+            <Field label="Customer" htmlFor="sale-customer" hint="Type a name or contact number to search.">
+              <Combobox
+                id="sale-customer"
+                value={customerId}
+                options={customerOptions}
+                onChange={setCustomerId}
+                placeholder="Search customer…"
+                emptyText="No customer matches — use Quick add below."
               />
             </Field>
-
-            <Field label="Customer" htmlFor="sale-customer">
-              <SelectInput
-                id="sale-customer"
-                required
-                value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
-              >
-                <option value="">Select customer</option>
-                {filteredCustomers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.contact ? ` · ${c.contact}` : ''}
-                  </option>
-                ))}
-              </SelectInput>
-            </Field>
-            {customerQuery && filteredCustomers.length === 0 ? (
-              <p className="faint">No customer matches “{customerQuery}”. Use Quick add below.</p>
-            ) : null}
 
             {canCreate ? (
               <div className="row" style={{ alignItems: 'flex-end' }}>
@@ -872,9 +842,27 @@ export function SalesPage() {
               </p>
             ) : null}
 
-            <Field label="Official Receipt # (optional)" htmlFor="or">
-              <TextInput id="or" value={orNumber} onChange={(e) => setOrNumber(e.target.value)} />
-            </Field>
+            <div className="row" style={{ alignItems: 'flex-start' }}>
+              <div style={{ flex: 1 }}>
+                <Field
+                  label="Delivery Receipt #"
+                  htmlFor="dr"
+                  hint="From your printed DR. Leave blank to auto-generate."
+                >
+                  <TextInput
+                    id="dr"
+                    value={drNumber}
+                    onChange={(e) => setDrNumber(e.target.value)}
+                    placeholder="Auto"
+                  />
+                </Field>
+              </div>
+              <div style={{ flex: 1 }}>
+                <Field label="Official Receipt # (optional)" htmlFor="or">
+                  <TextInput id="or" value={orNumber} onChange={(e) => setOrNumber(e.target.value)} />
+                </Field>
+              </div>
+            </div>
 
             {!selectedSku ? <p className="error-banner">No SKU for this variety + sack size.</p> : null}
           </form>
@@ -929,22 +917,12 @@ export function SalesPage() {
             <div className="row" style={{ alignItems: 'flex-end', flexWrap: 'wrap' }}>
               <div style={{ flex: '1 1 150px' }}>
                 <Field label="From" htmlFor="sales-from">
-                  <TextInput
-                    id="sales-from"
-                    type="date"
-                    value={historyFrom}
-                    onChange={(e) => setHistoryFrom(e.target.value)}
-                  />
+                  <DateInput id="sales-from" value={historyFrom} onChange={setHistoryFrom} placeholder="Any date" />
                 </Field>
               </div>
               <div style={{ flex: '1 1 150px' }}>
                 <Field label="To" htmlFor="sales-to">
-                  <TextInput
-                    id="sales-to"
-                    type="date"
-                    value={historyTo}
-                    onChange={(e) => setHistoryTo(e.target.value)}
-                  />
+                  <DateInput id="sales-to" value={historyTo} onChange={setHistoryTo} placeholder="Any date" />
                 </Field>
               </div>
               <div style={{ flex: '2 1 220px' }}>
@@ -965,7 +943,6 @@ export function SalesPage() {
             <p className="muted" style={{ margin: '0 0 10px' }}>
               Cash {formatPhp(paymentTotals.cash)} · GCash {formatPhp(paymentTotals.gcash)}
               {paymentTotals.check > 0 ? ` · Check ${formatPhp(paymentTotals.check)}` : ''}
-              {paymentTotals.bank > 0 ? ` · Bank ${formatPhp(paymentTotals.bank)}` : ''}
             </p>
             {ledgerSales.length === 0 ? (
               <div className="empty-state">No sales for this filter.</div>
@@ -981,8 +958,6 @@ export function SalesPage() {
                       <th className="num">Bags</th>
                       <th className="num">Price</th>
                       <th className="num">Amount</th>
-                      <th>Date deposit</th>
-                      <th>Bank</th>
                       <th className="center">Cheque</th>
                       <th className="center">Cash</th>
                       <th className="center">GCash</th>
@@ -990,7 +965,7 @@ export function SalesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {ledgerSales.map((sale) => {
+                    {ledgerPager.pageItems.map((sale) => {
                       const pay = paymentInfo(sale)
                       const items = sale.items?.length ? sale.items : [null]
                       return items.map((item, index) => (
@@ -1009,8 +984,6 @@ export function SalesPage() {
                           <td className="num">{item ? formatQty(Number(item.sacks)) : ''}</td>
                           <td className="num">{item ? formatPhp(item.price_per_sack) : ''}</td>
                           <td className="num">{item ? formatPhp(item.line_total) : ''}</td>
-                          <td>{index === 0 && pay.date ? formatDate(pay.date) : ''}</td>
-                          <td>{index === 0 ? pay.reference || (pay.bank ? 'Bank transfer' : '') : ''}</td>
                           <td className="center">{index === 0 && pay.check ? '✓' : ''}</td>
                           <td className="center">{index === 0 && pay.cash ? '✓' : ''}</td>
                           <td className="center">{index === 0 && pay.gcash ? '✓' : ''}</td>
@@ -1045,12 +1018,23 @@ export function SalesPage() {
                       <td className="num">
                         <strong>{formatPhp(historyTotals.gross)}</strong>
                       </td>
-                      <td colSpan={6} />
+                      <td colSpan={4} />
                     </tr>
                   </tfoot>
                 </Table>
               </div>
             )}
+            <Pagination
+              page={ledgerPager.page}
+              pageCount={ledgerPager.pageCount}
+              pageSize={ledgerPager.pageSize}
+              total={ledgerPager.total}
+              start={ledgerPager.start}
+              end={ledgerPager.end}
+              onPage={ledgerPager.setPage}
+              onPageSize={ledgerPager.setPageSize}
+              noun="sale"
+            />
           </Card>
         </div>
       ) : null}
@@ -1071,7 +1055,7 @@ export function SalesPage() {
                 </tr>
               </thead>
               <tbody>
-                {overdue.map((d) => {
+                {overduePager.pageItems.map((d) => {
                   const sale = d.plan?.sale
                   const left = Number(d.amount) - Number(d.paid_amount)
                   return (
@@ -1087,6 +1071,17 @@ export function SalesPage() {
               </tbody>
             </Table>
           )}
+          <Pagination
+            page={overduePager.page}
+            pageCount={overduePager.pageCount}
+            pageSize={overduePager.pageSize}
+            total={overduePager.total}
+            start={overduePager.start}
+            end={overduePager.end}
+            onPage={overduePager.setPage}
+            onPageSize={overduePager.setPageSize}
+            noun="due"
+          />
         </Card>
       ) : null}
 

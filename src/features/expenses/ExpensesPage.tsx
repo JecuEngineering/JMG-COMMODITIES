@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { DateInput } from '../../components/DateInput'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { Modal } from '../../components/Modal'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches } from '../inventory/inventoryApi'
@@ -103,6 +105,8 @@ export function ExpensesPage() {
     () => filteredExpenses.reduce((sum, ex) => sum + Number(ex.amount), 0),
     [filteredExpenses],
   )
+
+  const expensePager = usePaged(filteredExpenses, 10)
 
   if (!canView) {
     return (
@@ -238,7 +242,7 @@ export function ExpensesPage() {
               </SelectInput>
             </Field>
             <Field label="Date" htmlFor="ex-date">
-              <TextInput id="ex-date" type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
+              <DateInput id="ex-date" value={date} onChange={setDate} />
             </Field>
             <Field label="Amount (₱)" htmlFor="ex-amt">
               <TextInput
@@ -267,10 +271,10 @@ export function ExpensesPage() {
       <Card title="Filters" className="no-print">
         <div className="row" style={{ flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
           <Field label="From" htmlFor="ex-from">
-            <TextInput id="ex-from" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+            <DateInput id="ex-from" value={fromDate} onChange={setFromDate} placeholder="Any date" />
           </Field>
           <Field label="To" htmlFor="ex-to">
-            <TextInput id="ex-to" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+            <DateInput id="ex-to" value={toDate} onChange={setToDate} placeholder="Any date" />
           </Field>
           <Field label="Category" htmlFor="ex-filter-cat">
             <SelectInput
@@ -318,7 +322,7 @@ export function ExpensesPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredExpenses.map((ex) => (
+              {expensePager.pageItems.map((ex) => (
                 <tr key={ex.id}>
                   <td>{formatDate(ex.expense_date)}</td>
                   <td>{ex.branch?.name ?? '—'}</td>
@@ -336,6 +340,17 @@ export function ExpensesPage() {
             </tfoot>
           </Table>
         )}
+        <Pagination
+          page={expensePager.page}
+          pageCount={expensePager.pageCount}
+          pageSize={expensePager.pageSize}
+          total={expensePager.total}
+          start={expensePager.start}
+          end={expensePager.end}
+          onPage={expensePager.setPage}
+          onPageSize={expensePager.setPageSize}
+          noun="expense"
+        />
       </Card>
     </div>
   )

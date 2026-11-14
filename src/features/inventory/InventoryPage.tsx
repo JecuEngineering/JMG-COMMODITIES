@@ -3,9 +3,11 @@ import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
+import { DateInput } from '../../components/DateInput'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate, formatDateTime, todayInputValue } from '../../lib/dates'
@@ -253,6 +255,10 @@ export function InventoryPage() {
     })
     return withBalance.reverse()
   }, [cardMoves])
+
+  const balancePager = usePaged(filteredBalances, 25)
+  const movementPager = usePaged(cardRunning, 25)
+  const adjustmentPager = usePaged(adjustments, 10)
 
   async function loadCard() {
     if (!cardBranch || !cardSku) return
@@ -765,7 +771,7 @@ export function InventoryPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredBalances.map((row) => (
+                    {balancePager.pageItems.map((row) => (
                       <tr key={`${row.branch_id}-${row.sku_id}`}>
                         <td>
                           <div className="inv-cell-primary">{row.variety_name}</div>
@@ -803,6 +809,18 @@ export function InventoryPage() {
                   </tbody>
                 </Table>
               )}
+
+              <Pagination
+                page={balancePager.page}
+                pageCount={balancePager.pageCount}
+                pageSize={balancePager.pageSize}
+                total={balancePager.total}
+                start={balancePager.start}
+                end={balancePager.end}
+                onPage={balancePager.setPage}
+                onPageSize={balancePager.setPageSize}
+                noun="stock line"
+              />
 
               <p className="inv-footer-hint">
                 Showing {filteredBalances.length} of {balances.length} stock lines · Low = at or below
@@ -860,7 +878,7 @@ export function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {cardRunning.map((m) => (
+                  {movementPager.pageItems.map((m) => (
                     <tr key={m.id}>
                       <td>{formatDateTime(m.moved_at)}</td>
                       <td>{m.movement_type}</td>
@@ -872,6 +890,17 @@ export function InventoryPage() {
                 </tbody>
               </Table>
             )}
+            <Pagination
+              page={movementPager.page}
+              pageCount={movementPager.pageCount}
+              pageSize={movementPager.pageSize}
+              total={movementPager.total}
+              start={movementPager.start}
+              end={movementPager.end}
+              onPage={movementPager.setPage}
+              onPageSize={movementPager.setPageSize}
+              noun="movement"
+            />
           </div>
         </Card>
       ) : null}
@@ -996,7 +1025,7 @@ export function InventoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {adjustments.map((adj) => (
+                {adjustmentPager.pageItems.map((adj) => (
                   <tr key={adj.id}>
                     <td>{formatDateTime(adj.created_at)}</td>
                     <td>
@@ -1033,6 +1062,17 @@ export function InventoryPage() {
               </tbody>
             </Table>
           )}
+          <Pagination
+            page={adjustmentPager.page}
+            pageCount={adjustmentPager.pageCount}
+            pageSize={adjustmentPager.pageSize}
+            total={adjustmentPager.total}
+            start={adjustmentPager.start}
+            end={adjustmentPager.end}
+            onPage={adjustmentPager.setPage}
+            onPageSize={adjustmentPager.setPageSize}
+            noun="adjustment"
+          />
         </Card>
       ) : null}
 
@@ -1199,7 +1239,7 @@ export function InventoryPage() {
             </SelectInput>
           </Field>
           <Field label="Date" htmlFor="rp-date">
-            <TextInput id="rp-date" type="date" value={rpDate} onChange={(e) => setRpDate(e.target.value)} />
+            <DateInput id="rp-date" value={rpDate} onChange={setRpDate} />
           </Field>
           <div className="row" style={{ alignItems: 'flex-end' }}>
             <div style={{ flex: 1 }}>

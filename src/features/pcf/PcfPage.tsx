@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { DateInput } from '../../components/DateInput'
 import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { useCompanySettings } from '../settings/useCompanySettings'
@@ -321,6 +323,24 @@ export function PcfPage() {
     return map
   }, [vouchers])
 
+  const searchTerm = voucherSearch.trim().toLowerCase()
+  const recentVouchers = useMemo(
+    () =>
+      vouchers.filter(
+        (v) =>
+          !searchTerm ||
+          v.payee.toLowerCase().includes(searchTerm) ||
+          (v.purpose ?? '').toLowerCase().includes(searchTerm),
+      ),
+    [vouchers, searchTerm],
+  )
+
+  const recentPager = usePaged(recentVouchers, 10)
+  const voucherPager = usePaged(vouchers, 10)
+  const replenishPager = usePaged(replenishments, 10)
+  const reportVoucherPager = usePaged(vouchers, 10)
+  const reportReplenishPager = usePaged(replenishments, 10)
+
   if (!canView) {
     return (
       <div className="app-page">
@@ -456,13 +476,6 @@ export function PcfPage() {
   const fundAmount = Number(selectedFund?.fund_amount ?? 0)
   const meterPercent = fundAmount > 0 ? Math.min(100, Math.max(0, (Number(selectedFund?.balance ?? 0) / fundAmount) * 100)) : 0
   const markerPercent = fundAmount > 0 ? Math.min(100, Math.max(0, (Number(selectedFund?.low_threshold ?? 0) / fundAmount) * 100)) : 0
-  const searchTerm = voucherSearch.trim().toLowerCase()
-  const recentVouchers = vouchers.filter(
-    (v) =>
-      !searchTerm ||
-      v.payee.toLowerCase().includes(searchTerm) ||
-      (v.purpose ?? '').toLowerCase().includes(searchTerm),
-  )
 
   function openReplenish() {
     setRAmount(unrecoveredTotal > 0 ? String(unrecoveredTotal) : '')
@@ -717,7 +730,7 @@ export function PcfPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {recentVouchers.slice(0, 8).map((v) => (
+                      {recentPager.pageItems.map((v) => (
                         <tr key={v.id}>
                           <td className="pcf-cell-ref">{voucherNumbers.get(v.id)}</td>
                           <td>{formatDate(v.voucher_date)}</td>
@@ -735,6 +748,17 @@ export function PcfPage() {
                     </tbody>
                   </Table>
                 )}
+                <Pagination
+                  page={recentPager.page}
+                  pageCount={recentPager.pageCount}
+                  pageSize={recentPager.pageSize}
+                  total={recentPager.total}
+                  start={recentPager.start}
+                  end={recentPager.end}
+                  onPage={recentPager.setPage}
+                  onPageSize={recentPager.setPageSize}
+                  noun="voucher"
+                />
               </Card>
             </>
           ) : (
@@ -839,7 +863,7 @@ export function PcfPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {vouchers.map((v) => (
+                  {voucherPager.pageItems.map((v) => (
                     <tr key={v.id}>
                       <td>{formatDate(v.voucher_date)}</td>
                       <td>{v.payee}</td>
@@ -851,6 +875,17 @@ export function PcfPage() {
                 </tbody>
               </Table>
             )}
+            <Pagination
+              page={voucherPager.page}
+              pageCount={voucherPager.pageCount}
+              pageSize={voucherPager.pageSize}
+              total={voucherPager.total}
+              start={voucherPager.start}
+              end={voucherPager.end}
+              onPage={voucherPager.setPage}
+              onPageSize={voucherPager.setPageSize}
+              noun="voucher"
+            />
           </Card>
         </div>
       ) : null}
@@ -874,7 +909,7 @@ export function PcfPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {replenishments.map((r) => (
+                  {replenishPager.pageItems.map((r) => (
                     <tr key={r.id}>
                       <td>{formatDate(r.replenishment_date)}</td>
                       <td>{r.reference_no ?? '—'}</td>
@@ -885,6 +920,17 @@ export function PcfPage() {
                 </tbody>
               </Table>
             )}
+            <Pagination
+              page={replenishPager.page}
+              pageCount={replenishPager.pageCount}
+              pageSize={replenishPager.pageSize}
+              total={replenishPager.total}
+              start={replenishPager.start}
+              end={replenishPager.end}
+              onPage={replenishPager.setPage}
+              onPageSize={replenishPager.setPageSize}
+              noun="replenishment"
+            />
           </Card>
         </div>
       ) : null}
@@ -900,19 +946,17 @@ export function PcfPage() {
                 <TextInput id="req-purpose" value={requestPurpose} onChange={(e) => setRequestPurpose(e.target.value)} />
               </Field>
               <Field label="Expenses from" htmlFor="req-from">
-                <TextInput
+                <DateInput
                   id="req-from"
-                  type="date"
                   value={requestFromValue}
-                  onChange={(e) => setRequestFrom(e.target.value)}
+                  onChange={setRequestFrom}
                 />
               </Field>
               <Field label="Expenses to" htmlFor="req-to">
-                <TextInput
+                <DateInput
                   id="req-to"
-                  type="date"
                   value={requestToValue}
-                  onChange={(e) => setRequestTo(e.target.value)}
+                  onChange={setRequestTo}
                 />
               </Field>
               <Field label="PCF funding (₱)" htmlFor="req-funding">
@@ -940,11 +984,10 @@ export function PcfPage() {
                 />
               </Field>
               <Field label="Released date" htmlFor="req-released">
-                <TextInput
+                <DateInput
                   id="req-released"
-                  type="date"
                   value={requestReleasedDate}
-                  onChange={(e) => setRequestReleasedDate(e.target.value)}
+                  onChange={setRequestReleasedDate}
                 />
               </Field>
               <Field label="Thru" htmlFor="req-thru">
@@ -1132,19 +1175,17 @@ export function PcfPage() {
           <Card title="Record period" className="no-print">
             <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
               <Field label="From" htmlFor="rec-from">
-                <TextInput
+                <DateInput
                   id="rec-from"
-                  type="date"
                   value={recordFromValue}
-                  onChange={(e) => setRecordFrom(e.target.value)}
+                  onChange={setRecordFrom}
                 />
               </Field>
               <Field label="To" htmlFor="rec-to">
-                <TextInput
+                <DateInput
                   id="rec-to"
-                  type="date"
                   value={recordToValue}
-                  onChange={(e) => setRecordTo(e.target.value)}
+                  onChange={setRecordTo}
                 />
               </Field>
             </div>
@@ -1283,7 +1324,7 @@ export function PcfPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {vouchers.map((v) => (
+                  {reportVoucherPager.pageItems.map((v) => (
                     <tr key={v.id}>
                       <td>{formatDate(v.voucher_date)}</td>
                       <td>{v.payee}</td>
@@ -1301,6 +1342,17 @@ export function PcfPage() {
                 </tfoot>
               </Table>
             )}
+            <Pagination
+              page={reportVoucherPager.page}
+              pageCount={reportVoucherPager.pageCount}
+              pageSize={reportVoucherPager.pageSize}
+              total={reportVoucherPager.total}
+              start={reportVoucherPager.start}
+              end={reportVoucherPager.end}
+              onPage={reportVoucherPager.setPage}
+              onPageSize={reportVoucherPager.setPageSize}
+              noun="voucher"
+            />
 
             <h3 style={{ marginTop: 24 }}>Replenishments</h3>
             {replenishments.length === 0 ? (
@@ -1315,7 +1367,7 @@ export function PcfPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {replenishments.map((r) => (
+                  {reportReplenishPager.pageItems.map((r) => (
                     <tr key={r.id}>
                       <td>{formatDate(r.replenishment_date)}</td>
                       <td>{r.reference_no ?? '—'}</td>
@@ -1325,6 +1377,17 @@ export function PcfPage() {
                 </tbody>
               </Table>
             )}
+            <Pagination
+              page={reportReplenishPager.page}
+              pageCount={reportReplenishPager.pageCount}
+              pageSize={reportReplenishPager.pageSize}
+              total={reportReplenishPager.total}
+              start={reportReplenishPager.start}
+              end={reportReplenishPager.end}
+              onPage={reportReplenishPager.setPage}
+              onPageSize={reportReplenishPager.setPageSize}
+              noun="replenishment"
+            />
           </Card>
           <div className="no-print row" style={{ gap: 8 }}>
             <Button variant="secondary" onClick={exportReportExcel}>
@@ -1357,7 +1420,7 @@ export function PcfPage() {
         >
           <form id="pcf-voucher-form" className="stack" onSubmit={onVoucherSubmit}>
             <Field label="Date" htmlFor="pcf-v-date">
-              <TextInput id="pcf-v-date" type="date" required value={vDate} onChange={(e) => setVDate(e.target.value)} />
+              <DateInput id="pcf-v-date" value={vDate} onChange={setVDate} />
             </Field>
             <Field label="Payee" htmlFor="pcf-v-payee">
               <TextInput id="pcf-v-payee" required value={vPayee} onChange={(e) => setVPayee(e.target.value)} />

@@ -141,6 +141,7 @@ export async function createSale(input: {
   paymentType: PaymentMethod
   items: { sku_id: string; sacks: number; price_per_sack: number; discount?: number }[]
   orNumber?: string
+  drNumber?: string
   notes?: string
   downPayment?: number
   installmentParts?: number
@@ -158,6 +159,7 @@ export async function createSale(input: {
     p_installment_parts: input.installmentParts ?? 1,
     p_first_due_date: input.firstDueDate || null,
     p_payments: input.payments ?? null,
+    p_dr_number: input.drNumber?.trim() || null,
   })
   if (error) throw error
   return data as string

@@ -4,6 +4,7 @@ import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Field, TextArea } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate, todayInputValue } from '../../lib/dates'
@@ -60,6 +61,8 @@ export function InquiriesPage() {
 
   const filtered =
     filter === 'all' ? inquiries : inquiries.filter((i) => i.status === filter)
+
+  const pager = usePaged(filtered, 10)
 
   const counts: Record<FilterId, number> = {
     new: inquiries.filter((i) => i.status === 'new').length,
@@ -188,7 +191,7 @@ export function InquiriesPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((inq) => (
+              {pager.pageItems.map((inq) => (
                 <tr
                   key={inq.id}
                   onClick={() => void openInquiry(inq)}
@@ -217,6 +220,17 @@ export function InquiriesPage() {
             </tbody>
           </Table>
         )}
+        <Pagination
+          page={pager.page}
+          pageCount={pager.pageCount}
+          pageSize={pager.pageSize}
+          total={pager.total}
+          start={pager.start}
+          end={pager.end}
+          onPage={pager.setPage}
+          onPageSize={pager.setPageSize}
+          noun="inquiry"
+        />
       </Card>
 
       {selected ? (

@@ -1,5 +1,14 @@
 # Changelog
 
+## Searchable customer, DR on new sale, paginated lists and a real date picker (2026-11-15)
+
+- **Customer search**: the New Sale customer field is now a combobox — type part of a name or contact number and pick from the filtered list (`src/components/Combobox.tsx`, arrow keys/Enter/Escape supported). Quick add stays underneath.
+- **DR on the sale**: a `Delivery Receipt #` field sits beside `Official Receipt #`. Leave it blank and the branch counter still auto-generates; a typed number is stored as-is and a duplicate in the same branch is rejected with `DR number X is already used in this branch`. Migration `202611150019_sale_dr_number.sql` recreates `create_sale` with `p_dr_number` (applied to the hosted project).
+- **Sales history**: the `Date deposit` and `Bank` columns are gone from the ledger and from the Excel export (`DR NO.` takes the last column); cash/GCash/cheque ticks and the summary line are unchanged.
+- **Pagination everywhere**: every data table (Sales ledger and overdue dues, Customers, Products/prices, Inventory balances/movements/adjustments, Containers/purchases/suppliers, Expenses, Employees, Fund requests, Liquidations, Petty cash vouchers/replenishments, Reports, Audit log, Inquiries, Branches) now pages 10 rows at a time with a `10 / 25 / 50` rows-per-page selector (`src/components/Pagination.tsx`, `usePaged`). Totals still cover the whole filtered set, not just the visible page.
+- **Date pickers**: all date fields use the new `DateInput` (`src/components/DateInput.tsx`) — a styled trigger with a month calendar popover, Today/Clear shortcuts, Escape/outside-click close and fixed positioning so it is never clipped inside modals. Native `<input type="date">` remains only as the hidden fallback value holder.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass; migration 019 applied and its signature confirmed on production. The authenticated screens could not be clicked through in the in-app browser this pass (no visible browser surface and no live login session), so the visual check is limited to the build plus the login page console.
+
 ## Dashboard showed the wrong day and counted GCash as cash (2026-11-15)
 
 - **Date**: `todayInputValue()` / `toDateInputValue()` used `toISOString()`, i.e. the **UTC** date. Between midnight and 08:00 in Manila they returned yesterday, so at 01:15 on 11/15 the dashboard labelled 11/14's ₱261,020 as “Today's sales” (header still said November 15). Both helpers now build the date from local year/month/day; existing date-only strings are passed through untouched. Price lookup, overdue installments, customer balances, container arrival date and the reports date range now use the same helper.

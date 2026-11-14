@@ -4,6 +4,7 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Field, TextInput } from '../../components/Field'
 import { Modal } from '../../components/Modal'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { writeAuditLog } from '../../lib/audit'
 import { canManageSettings } from '../../lib/roles'
@@ -85,6 +86,8 @@ export function BranchesPanel() {
   useEffect(() => {
     void load()
   }, [load])
+
+  const branchPager = usePaged(branches, 10)
 
   const preview = useMemo(() => {
     if (form.latitude.trim() === '' || form.longitude.trim() === '') return null
@@ -409,7 +412,7 @@ export function BranchesPanel() {
             </tr>
           </thead>
           <tbody>
-            {branches.map((b) => {
+            {branchPager.pageItems.map((b) => {
               const coords = branchCoords(b)
               return (
                 <tr key={b.id}>
@@ -446,6 +449,17 @@ export function BranchesPanel() {
           </tbody>
         </Table>
       )}
+      <Pagination
+        page={branchPager.page}
+        pageCount={branchPager.pageCount}
+        pageSize={branchPager.pageSize}
+        total={branchPager.total}
+        start={branchPager.start}
+        end={branchPager.end}
+        onPage={branchPager.setPage}
+        onPageSize={branchPager.setPageSize}
+        noun="branch"
+      />
     </Card>
     </>
   )

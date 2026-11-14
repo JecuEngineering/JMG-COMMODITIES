@@ -3,9 +3,11 @@ import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
+import { DateInput } from '../../components/DateInput'
 import { Field, SelectInput, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
+import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate, todayInputValue } from '../../lib/dates'
@@ -90,6 +92,8 @@ export function ProductsPage() {
     () => prices.filter((p) => p.sku_id === historySkuId),
     [prices, historySkuId],
   )
+
+  const skuPager = usePaged(skus, 10)
 
   function exportSkus() {
     downloadCsv(
@@ -454,13 +458,7 @@ export function ProductsPage() {
               </div>
               <div>
                 <Field label="Effective from" htmlFor="price-from">
-                  <TextInput
-                    id="price-from"
-                    type="date"
-                    required
-                    value={priceEffectiveFrom}
-                    onChange={(e) => setPriceEffectiveFrom(e.target.value)}
-                  />
+                  <DateInput id="price-from" value={priceEffectiveFrom} onChange={setPriceEffectiveFrom} />
                 </Field>
               </div>
             </div>
@@ -477,7 +475,7 @@ export function ProductsPage() {
             </tr>
           </thead>
           <tbody>
-            {skus.map((sku) => {
+            {skuPager.pageItems.map((sku) => {
               const price = currentPrice(prices, sku.id)
               return (
                 <tr key={sku.id}>
@@ -499,6 +497,17 @@ export function ProductsPage() {
             })}
           </tbody>
         </Table>
+        <Pagination
+          page={skuPager.page}
+          pageCount={skuPager.pageCount}
+          pageSize={skuPager.pageSize}
+          total={skuPager.total}
+          start={skuPager.start}
+          end={skuPager.end}
+          onPage={skuPager.setPage}
+          onPageSize={skuPager.setPageSize}
+          noun="SKU"
+        />
 
         {historySkuId ? (
           <div className="stack" style={{ marginTop: 16 }}>
