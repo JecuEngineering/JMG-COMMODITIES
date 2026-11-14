@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { DateInput } from '../../components/DateInput'
@@ -8,6 +9,7 @@ import { Modal } from '../../components/Modal'
 import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
+import { ExpensesPanel } from '../expenses/ExpensesPanel'
 import { useCompanySettings } from '../settings/useCompanySettings'
 import { formatDate, todayInputValue } from '../../lib/dates'
 import { downloadExcel, printPage } from '../../lib/export'
@@ -17,6 +19,7 @@ import { supabase } from '../../lib/supabase'
 import type { Branch } from '../../types/database'
 import { fetchBranches } from '../inventory/inventoryApi'
 import {
+  PCF_VOUCHER_LIMIT,
   createFund,
   createReplenishment,
   createVoucher,
@@ -24,6 +27,7 @@ import {
   fetchReplenishments,
   fetchUnrecoveredVouchers,
   fetchVouchers,
+  pcfReceiptUrl,
   type PcfFundBalance,
   type PcfReplenishment,
   type PcfVoucher,
@@ -32,14 +36,13 @@ import './pcf.css'
 
 const PCF_CATEGORIES = ['Supplies', 'Transportation', 'Repairs', 'Utilities', 'Food', 'Other']
 
-type TabId = 'funds' | 'vouchers' | 'replenish' | 'request' | 'record' | 'report'
+type TabId = 'funds' | 'vouchers' | 'replenish' | 'expenses' | 'report'
 
-const TABS: { id: TabId; label: string; needs?: 'replenish' | 'request' }[] = [
+const TABS: { id: TabId; label: string; needs?: 'replenish' }[] = [
   { id: 'funds', label: 'Funds' },
   { id: 'vouchers', label: 'Vouchers' },
   { id: 'replenish', label: 'Replenishments', needs: 'replenish' },
-  { id: 'request', label: 'Request for fund', needs: 'request' },
-  { id: 'record', label: 'Record' },
+  { id: 'expenses', label: 'Expenses' },
   { id: 'report', label: 'Report' },
 ]
 
@@ -47,19 +50,9 @@ function pad(n: number) {
   return String(n).padStart(2, '0')
 }
 
-function localDate(d: Date) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
 function monthStart() {
   const d = new Date()
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`
-}
-
-function addDays(date: string, days: number) {
-  const d = new Date(`${date}T00:00:00`)
-  d.setDate(d.getDate() + days)
-  return localDate(d)
 }
 
 function longDate(date: string) {
@@ -70,20 +63,9 @@ function longDate(date: string) {
     .toUpperCase()
 }
 
-interface RequestLine {
-  id: string
-  description: string
-  amount: string
-}
-
-let lineSeq = 0
-function newRequestLine(): RequestLine {
-  lineSeq += 1
-  return { id: `line-${lineSeq}`, description: '', amount: '' }
-}
-
 export function PcfPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const { settings } = useCompanySettings()
   const role = user!.profile.role
   const profileBranchId = user!.profile.branch_id
@@ -125,19 +107,10 @@ export function PcfPage() {
   const [newFundNotes, setNewFundNotes] = useState('')
   const [fundSaving, setFundSaving] = useState(false)
 
-  // Request for fund / record sheet controls (null = derived default)
-  const [requestNo, setRequestNo] = useState<string | null>(null)
-  const [requestPurpose, setRequestPurpose] = useState('REQUEST FOR FUND')
-  const [requestFrom, setRequestFrom] = useState<string | null>(null)
-  const [requestTo, setRequestTo] = useState<string | null>(null)
-  const [requestFunding, setRequestFunding] = useState<string | null>(null)
-  const [requestApprovedBy, setRequestApprovedBy] = useState('')
-  const [requestPresident, setRequestPresident] = useState('')
-  const [requestReleasedDate, setRequestReleasedDate] = useState(todayInputValue())
-  const [requestThru, setRequestThru] = useState('')
-  const [requestLines, setRequestLines] = useState<RequestLine[]>(() => [newRequestLine()])
+  // Monitoring period controls (null = derived default)
   const [recordFrom, setRecordFrom] = useState<string | null>(null)
   const [recordTo, setRecordTo] = useState<string | null>(null)
+  const [approvedBy, setApprovedBy] = useState('')
 
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -207,65 +180,8 @@ export function PcfPage() {
     return scoped.filter((b) => !funds.some((f) => f.branch_id === b.id))
   }, [branches, funds, canViewAll, profileBranchId])
 
-  useEffect(() => {
-    setRequestNo(null)
-    setRequestFrom(null)
-    setRequestTo(null)
-    setRequestFunding(null)
-    setRequestLines([newRequestLine()])
-    setRequestReleasedDate(todayInputValue())
-    setRecordFrom(null)
-    setRecordTo(null)
-  }, [selectedFundId])
-
-  const requestFromValue =
-    requestFrom ?? (replenishments[0] ? addDays(replenishments[0].replenishment_date, 1) : monthStart())
-  const requestToValue = requestTo ?? todayInputValue()
   const recordFromValue = recordFrom ?? monthStart()
   const recordToValue = recordTo ?? todayInputValue()
-  const fundingValue =
-    requestFunding == null ? Number(selectedFund?.fund_amount ?? 0) : Number(requestFunding) || 0
-  const requestNoValue =
-    requestNo ??
-    `RFH-${(selectedFund?.branch?.name ?? 'PCF').replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}-${todayInputValue().replace(/-/g, '')}`
-
-  const requestVouchers = useMemo(
-    () =>
-      vouchers
-        .filter((v) => v.voucher_date >= requestFromValue && v.voucher_date <= requestToValue)
-        .slice()
-        .sort((a, b) => a.voucher_date.localeCompare(b.voucher_date)),
-    [vouchers, requestFromValue, requestToValue],
-  )
-
-  const categoryRows = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const v of requestVouchers) {
-      const key = v.category || 'Other'
-      map.set(key, (map.get(key) ?? 0) + Number(v.amount))
-    }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-  }, [requestVouchers])
-
-  const filledRequestLines = useMemo(
-    () =>
-      requestLines.filter(
-        (line) => line.description.trim() !== '' || (Number(line.amount) || 0) > 0,
-      ),
-    [requestLines],
-  )
-
-  const requestVoucherTotal = useMemo(
-    () => requestVouchers.reduce((sum, v) => sum + Number(v.amount), 0),
-    [requestVouchers],
-  )
-
-  const requestLinesTotal = useMemo(
-    () => filledRequestLines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0),
-    [filledRequestLines],
-  )
-
-  const requestTotal = requestVoucherTotal + requestLinesTotal
 
   const recordEntries = useMemo(() => {
     const inRange = (date: string) => date >= recordFromValue && date <= recordToValue
@@ -364,6 +280,12 @@ export function PcfPage() {
     }
     if (!Number.isFinite(Number(vAmount)) || Number(vAmount) <= 0) {
       setError('Enter an amount greater than zero.')
+      return
+    }
+    if (Number(vAmount) > PCF_VOUCHER_LIMIT) {
+      setError(
+        `Petty cash vouchers are limited to ${formatPhp(PCF_VOUCHER_LIMIT)}. Use Fund Requests for larger expenses.`,
+      )
       return
     }
     try {
@@ -490,32 +412,19 @@ export function PcfPage() {
   const branchLabel = selectedFund?.branch?.name ?? selectedFund?.branch_id ?? 'PCF'
   const companyName = settings?.name ?? 'JMG Commodities Inc.'
   const logoSrc = settings?.logo_url ?? '/JMG COMMODITIES.jpeg'
-  const requestedByLine = `${user!.profile.full_name} (${ROLE_LABELS[role]})`
 
-  function exportRequestExcel() {
-    const balance = fundingValue - requestTotal
-    downloadExcel(
-      `request-for-fund-${requestNoValue}.xls`,
-      'Request for Fund',
-      ['Unit / Item', 'Description', 'Amount'],
-      [
-        [branchLabel, 'PETTY CASH REPLENISHMENT', ''],
-        ['', `EXPENSE INCURRED ${longDate(requestFromValue)} - ${longDate(requestToValue)}`, ''],
-        ...categoryRows.map(([name, amount]) => ['', name, Number(amount).toFixed(2)]),
-        ...filledRequestLines.map((line) => [
-          '',
-          line.description.trim(),
-          (Number(line.amount) || 0).toFixed(2),
-        ]),
-        ['', 'TOTAL EXPENSE', requestTotal.toFixed(2)],
-        ['', 'PCF FUNDING', fundingValue.toFixed(2)],
-        ['', 'BALANCE', balance.toFixed(2)],
-        ['', 'FOR REQUEST', requestTotal.toFixed(2)],
-        ['', 'Requested by', requestedByLine],
-        ['', 'Approved by', requestApprovedBy],
-        ['', 'President', requestPresident],
-      ],
-    )
+  async function openReceipt(path: string) {
+    setError(null)
+    try {
+      const url = await pcfReceiptUrl(path)
+      if (!url) {
+        setError('Receipt could not be opened.')
+        return
+      }
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
   }
 
   function exportRecordExcel() {
@@ -555,20 +464,6 @@ export function PcfPage() {
     )
   }
 
-  function addRequestLine() {
-    setRequestLines((prev) => [...prev, newRequestLine()])
-  }
-
-  function updateRequestLine(id: string, field: 'description' | 'amount', value: string) {
-    setRequestLines((prev) => prev.map((line) => (line.id === id ? { ...line, [field]: value } : line)))
-  }
-
-  function removeRequestLine(id: string) {
-    setRequestLines((prev) =>
-      prev.length === 1 ? [newRequestLine()] : prev.filter((line) => line.id !== id),
-    )
-  }
-
   return (
     <div className="app-page stack">
       <div className="page-header">
@@ -594,6 +489,11 @@ export function PcfPage() {
           <Button variant="secondary" onClick={onPrintReport}>
             Print report
           </Button>
+          {canRequest ? (
+            <Button variant="secondary" onClick={() => navigate('/app/fund-requests?tab=rfh')}>
+              Request replenishment
+            </Button>
+          ) : null}
           {canManage && selectedFund ? (
             <Button onClick={() => setVoucherOpen(true)}>New money out</Button>
           ) : null}
@@ -610,9 +510,7 @@ export function PcfPage() {
       ) : null}
 
       <div className="pcf-tabs no-print" role="tablist">
-        {TABS.filter((item) =>
-          item.needs === 'replenish' ? canReplenish : item.needs === 'request' ? canRequest : true,
-        ).map((item) => (
+        {TABS.filter((item) => (item.needs === 'replenish' ? canReplenish : true)).map((item) => (
           <button
             key={item.id}
             type="button"
@@ -693,7 +591,10 @@ export function PcfPage() {
                       Request replenishment
                     </Button>
                   ) : canRequest ? (
-                    <Button variant="secondary" onClick={() => setTab('request')}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => navigate('/app/fund-requests?tab=rfh')}
+                    >
                       Prepare request
                     </Button>
                   ) : (
@@ -726,6 +627,7 @@ export function PcfPage() {
                         <th>Purpose</th>
                         <th>Category</th>
                         <th>Amount</th>
+                        <th>Receipt</th>
                         <th>Status</th>
                       </tr>
                     </thead>
@@ -738,6 +640,15 @@ export function PcfPage() {
                           <td>{v.purpose ?? '—'}</td>
                           <td>{v.category ?? '—'}</td>
                           <td className="pcf-cell-amount">{formatPhp(v.amount)}</td>
+                          <td>
+                            {v.receipt_path ? (
+                              <Button variant="ghost" onClick={() => void openReceipt(v.receipt_path!)}>
+                                View
+                              </Button>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
                           <td>
                             <span className={`pcf-status${unrecoveredIds.has(v.id) ? ' is-pending' : ''}`}>
                               {unrecoveredIds.has(v.id) ? 'Not replenished' : 'Replenished'}
@@ -855,21 +766,33 @@ export function PcfPage() {
               <Table>
                 <thead>
                   <tr>
+                    <th>Voucher</th>
                     <th>Date</th>
                     <th>Payee</th>
                     <th>Category</th>
                     <th>Purpose</th>
                     <th>Amount</th>
+                    <th>Receipt</th>
                   </tr>
                 </thead>
                 <tbody>
                   {voucherPager.pageItems.map((v) => (
                     <tr key={v.id}>
+                      <td className="pcf-cell-ref">{voucherNumbers.get(v.id)}</td>
                       <td>{formatDate(v.voucher_date)}</td>
                       <td>{v.payee}</td>
                       <td>{v.category ?? '—'}</td>
                       <td>{v.purpose ?? '—'}</td>
                       <td>{formatPhp(v.amount)}</td>
+                      <td>
+                        {v.receipt_path ? (
+                          <Button variant="ghost" onClick={() => void openReceipt(v.receipt_path!)}>
+                            View
+                          </Button>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -935,244 +858,11 @@ export function PcfPage() {
         </div>
       ) : null}
 
-      {tab === 'request' && canRequest && selectedFund ? (
+      {tab === 'expenses' ? <ExpensesPanel /> : null}
+
+      {tab === 'report' && selectedFund ? (
         <div className="stack">
-          <Card title="Request details" className="no-print">
-            <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
-              <Field label="RFH #" htmlFor="req-no">
-                <TextInput id="req-no" value={requestNoValue} onChange={(e) => setRequestNo(e.target.value)} />
-              </Field>
-              <Field label="Purpose" htmlFor="req-purpose">
-                <TextInput id="req-purpose" value={requestPurpose} onChange={(e) => setRequestPurpose(e.target.value)} />
-              </Field>
-              <Field label="Expenses from" htmlFor="req-from">
-                <DateInput
-                  id="req-from"
-                  value={requestFromValue}
-                  onChange={setRequestFrom}
-                />
-              </Field>
-              <Field label="Expenses to" htmlFor="req-to">
-                <DateInput
-                  id="req-to"
-                  value={requestToValue}
-                  onChange={setRequestTo}
-                />
-              </Field>
-              <Field label="PCF funding (₱)" htmlFor="req-funding">
-                <TextInput
-                  id="req-funding"
-                  inputMode="decimal"
-                  value={requestFunding ?? String(selectedFund.fund_amount)}
-                  onChange={(e) => setRequestFunding(e.target.value)}
-                />
-              </Field>
-              <Field label="Approved by" htmlFor="req-approved">
-                <TextInput
-                  id="req-approved"
-                  value={requestApprovedBy}
-                  onChange={(e) => setRequestApprovedBy(e.target.value)}
-                  placeholder="Name"
-                />
-              </Field>
-              <Field label="President" htmlFor="req-president">
-                <TextInput
-                  id="req-president"
-                  value={requestPresident}
-                  onChange={(e) => setRequestPresident(e.target.value)}
-                  placeholder="Name"
-                />
-              </Field>
-              <Field label="Released date" htmlFor="req-released">
-                <DateInput
-                  id="req-released"
-                  value={requestReleasedDate}
-                  onChange={setRequestReleasedDate}
-                />
-              </Field>
-              <Field label="Thru" htmlFor="req-thru">
-                <TextInput
-                  id="req-thru"
-                  value={requestThru}
-                  onChange={(e) => setRequestThru(e.target.value)}
-                  placeholder="Released thru"
-                />
-              </Field>
-            </div>
-
-            <div className="stack" style={{ gap: 8, marginTop: 16 }}>
-              <span className="field-label" style={{ marginBottom: 0 }}>
-                Additional lines — typed straight into the form
-              </span>
-              {requestLines.map((line) => (
-                <div key={line.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
-                  <div style={{ flex: 1 }}>
-                    <TextInput
-                      value={line.description}
-                      onChange={(e) => updateRequestLine(line.id, 'description', e.target.value)}
-                      placeholder="Description"
-                      aria-label="Description"
-                    />
-                  </div>
-                  <div style={{ width: 170 }}>
-                    <TextInput
-                      inputMode="decimal"
-                      value={line.amount}
-                      onChange={(e) => updateRequestLine(line.id, 'amount', e.target.value)}
-                      placeholder="Amount (₱)"
-                      aria-label="Amount"
-                    />
-                  </div>
-                  <Button variant="ghost" onClick={() => removeRequestLine(line.id)}>
-                    Remove
-                  </Button>
-                </div>
-              ))}
-              <div>
-                <Button variant="secondary" onClick={addRequestLine}>
-                  + Add line
-                </Button>
-              </div>
-            </div>
-
-            <p className="faint" style={{ marginTop: 10 }}>
-              {requestVouchers.length} voucher(s) in range
-              {filledRequestLines.length > 0 ? ` + ${filledRequestLines.length} typed line(s)` : ''} ·
-              Total {formatPhp(requestTotal)} · Balance {formatPhp(fundingValue - requestTotal)}
-            </p>
-            <div className="row" style={{ gap: 8, marginTop: 12 }}>
-              <Button variant="secondary" onClick={exportRequestExcel}>
-                Export Excel
-              </Button>
-              <Button variant="ghost" onClick={printPage} title="A4 portrait — select EPSON L1320 in the print dialog">
-                Print / PDF
-              </Button>
-            </div>
-            <p className="faint" style={{ marginTop: 8 }}>
-              A4 portrait. The browser print dialog lists every installed printer — choose the
-              EPSON L1320 there; a website cannot pre-select or hide printers.
-            </p>
-          </Card>
-
-          <div className="pcf-sheet">
-            <header className="pcf-sheet-head">
-              <img src={logoSrc} alt="" className="pcf-sheet-logo" />
-              <div className="pcf-sheet-company">
-                <strong>{companyName}</strong>
-                {settings?.address ? <span>{settings.address}</span> : null}
-                {settings?.contacts ? <span>{settings.contacts}</span> : null}
-              </div>
-            </header>
-
-            <h2 className="pcf-sheet-title">REQUEST FOR FUND</h2>
-
-            <div className="pcf-sheet-meta">
-              <div>
-                <strong>RFH#:</strong> {requestNoValue}
-              </div>
-              <div>
-                <strong>DATE:</strong> {longDate(requestToValue)}
-              </div>
-            </div>
-            <div className="pcf-sheet-purpose">
-              <strong>DESCRIPTION/ PURPOSE:</strong> <span>{requestPurpose}</span>
-            </div>
-
-            <table className="pcf-form-table">
-              <thead>
-                <tr>
-                  <th style={{ width: '20%' }}>UNIT/ ITEM</th>
-                  <th>DESCRIPTION</th>
-                  <th style={{ width: '24%' }}>AMOUNT</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td
-                    rowSpan={categoryRows.length + filledRequestLines.length + 1}
-                    className="pcf-unit"
-                  >
-                    {branchLabel}
-                    <br />
-                    PETTY CASH
-                    <br />
-                    REPLENISHMENT
-                  </td>
-                  <td className="pcf-period">
-                    EXPENSE INCURRED {longDate(requestFromValue)} - {longDate(requestToValue)}
-                  </td>
-                  <td />
-                </tr>
-                {categoryRows.map(([name, amount]) => (
-                  <tr key={name}>
-                    <td>{name.toUpperCase()}</td>
-                    <td className="pcf-num">{formatPhp(amount)}</td>
-                  </tr>
-                ))}
-                {filledRequestLines.map((line) => (
-                  <tr key={line.id}>
-                    <td>{line.description.trim().toUpperCase()}</td>
-                    <td className="pcf-num">{formatPhp(Number(line.amount) || 0)}</td>
-                  </tr>
-                ))}
-                {categoryRows.length === 0 && filledRequestLines.length === 0 ? (
-                  <tr>
-                    <td className="muted">No expenses in this period.</td>
-                    <td className="pcf-num">{formatPhp(0)}</td>
-                  </tr>
-                ) : null}
-                <tr>
-                  <td className="pcf-right pcf-strong">TOTAL EXPENSE</td>
-                  <td className="pcf-num pcf-strong">{formatPhp(requestTotal)}</td>
-                </tr>
-                <tr>
-                  <td className="pcf-right">PCF FUNDING</td>
-                  <td className="pcf-num">{formatPhp(fundingValue)}</td>
-                </tr>
-                <tr>
-                  <td className="pcf-right pcf-strong pcf-red">BALANCE</td>
-                  <td className="pcf-num pcf-strong pcf-red">{formatPhp(fundingValue - requestTotal)}</td>
-                </tr>
-                <tr className="pcf-for-request">
-                  <td />
-                  <td className="pcf-right pcf-strong">FOR REQUEST</td>
-                  <td className="pcf-num pcf-strong pcf-red">{formatPhp(requestTotal)}</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div className="pcf-signatures">
-              <div>
-                <span>REQUESTED BY:</span>
-                <strong>{user!.profile.full_name}</strong>
-                <em>{ROLE_LABELS[role].toUpperCase()}</em>
-              </div>
-              <div>
-                <span>APPROVED BY :</span>
-                <strong>{requestApprovedBy || '\u00A0'}</strong>
-                <em>FINANCE MANAGER</em>
-              </div>
-              <div>
-                <span>{'\u00A0'}</span>
-                <strong>{requestPresident || '\u00A0'}</strong>
-                <em>PRESIDENT</em>
-              </div>
-              <div>
-                <span>RELEASED DATE:</span>
-                <strong>{requestReleasedDate ? longDate(requestReleasedDate) : '\u00A0'}</strong>
-              </div>
-              <div>
-                <span>THRU:</span>
-                <strong>{requestThru || '\u00A0'}</strong>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {tab === 'record' && selectedFund ? (
-        <div className="stack">
-          <Card title="Record period" className="no-print">
+          <Card title="Monitoring period" className="no-print">
             <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
               <Field label="From" htmlFor="rec-from">
                 <DateInput
@@ -1188,6 +878,14 @@ export function PcfPage() {
                   onChange={setRecordTo}
                 />
               </Field>
+              <Field label="Approved by" htmlFor="rec-approved">
+                <TextInput
+                  id="rec-approved"
+                  value={approvedBy}
+                  onChange={(e) => setApprovedBy(e.target.value)}
+                  placeholder="Finance manager"
+                />
+              </Field>
             </div>
             <p className="faint" style={{ marginTop: 10 }}>
               Opening {formatPhp(recordTotals.opening)} · Expenses {formatPhp(recordTotals.expense)} ·
@@ -1196,7 +894,10 @@ export function PcfPage() {
             </p>
             <div className="row" style={{ gap: 8, marginTop: 12 }}>
               <Button variant="secondary" onClick={exportRecordExcel}>
-                Export Excel
+                Export monitoring Excel
+              </Button>
+              <Button variant="secondary" onClick={exportReportExcel}>
+                Export summary Excel
               </Button>
               <Button variant="ghost" onClick={printPage}>
                 Print / PDF
@@ -1279,7 +980,7 @@ export function PcfPage() {
               </div>
               <div>
                 <span>APPROVED BY:</span>
-                <strong>{requestApprovedBy || '\u00A0'}</strong>
+                <strong>{approvedBy || '\u00A0'}</strong>
                 <em>FINANCE MANAGER</em>
               </div>
             </div>
@@ -1321,6 +1022,7 @@ export function PcfPage() {
                     <th>Category</th>
                     <th>Purpose</th>
                     <th>Amount</th>
+                    <th>Receipt</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1331,6 +1033,15 @@ export function PcfPage() {
                       <td>{v.category ?? '—'}</td>
                       <td>{v.purpose ?? '—'}</td>
                       <td>{formatPhp(v.amount)}</td>
+                      <td>
+                        {v.receipt_path ? (
+                          <Button variant="ghost" onClick={() => void openReceipt(v.receipt_path!)}>
+                            View
+                          </Button>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1338,6 +1049,7 @@ export function PcfPage() {
                   <tr>
                     <td colSpan={4}><strong>Total</strong></td>
                     <td><strong>{formatPhp(selectedFund.vouchers_total)}</strong></td>
+                    <td />
                   </tr>
                 </tfoot>
               </Table>
@@ -1389,14 +1101,6 @@ export function PcfPage() {
               noun="replenishment"
             />
           </Card>
-          <div className="no-print row" style={{ gap: 8 }}>
-            <Button variant="secondary" onClick={exportReportExcel}>
-              Export Excel
-            </Button>
-            <Button variant="ghost" onClick={printPage}>
-              Print / PDF
-            </Button>
-          </div>
         </div>
       ) : null}
 
@@ -1442,12 +1146,28 @@ export function PcfPage() {
                 id="pcf-v-amt"
                 type="number"
                 min="0.01"
+                max={PCF_VOUCHER_LIMIT}
                 step="0.01"
                 required
                 value={vAmount}
                 onChange={(e) => setVAmount(e.target.value)}
               />
             </Field>
+            <p className="faint">
+              Petty cash covers expenses up to {formatPhp(PCF_VOUCHER_LIMIT)} per voucher. Anything
+              above that goes through{' '}
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  setVoucherOpen(false)
+                  navigate('/app/fund-requests')
+                }}
+              >
+                Fund Requests
+              </button>
+              .
+            </p>
             <Field label="Receipt photo" htmlFor="pcf-v-file">
               <input
                 id="pcf-v-file"

@@ -13,7 +13,6 @@ const NAV_ICONS: Record<string, string> = {
   products: '🌾',
   inventory: '📦',
   containers: '🚢',
-  expenses: '💳',
   pcf: '💰',
   fund_requests: '📋',
   liquidations: '🧾',

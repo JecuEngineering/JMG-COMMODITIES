@@ -18,7 +18,6 @@ export type NavItemId =
   | 'customers'
   | 'inventory'
   | 'containers'
-  | 'expenses'
   | 'pcf'
   | 'fund_requests'
   | 'liquidations'
@@ -77,12 +76,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Containers',
     path: '/app/containers',
     roles: ['owner', 'general_accountant', 'branch_accountant', 'warehouse'],
-  },
-  {
-    id: 'expenses',
-    label: 'Expenses',
-    path: '/app/expenses',
-    roles: ['owner', 'general_accountant', 'branch_accountant'],
   },
   {
     id: 'pcf',
@@ -276,7 +269,7 @@ export function canViewAllBranchesPcf(role: AppRole): boolean {
 
 // Fund requests
 export function canCreateFundRequest(role: AppRole): boolean {
-  return roleIn(role, ['employee', 'warehouse'])
+  return roleIn(role, ['employee', 'warehouse', 'branch_accountant'])
 }
 
 export function canReviewFundRequest(role: AppRole): boolean {

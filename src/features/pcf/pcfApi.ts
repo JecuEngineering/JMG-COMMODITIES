@@ -1,6 +1,9 @@
 import { supabase } from '../../lib/supabase'
 import type { Branch, Profile } from '../../types/database'
 
+/** Petty cash covers everyday small expenses; anything above this goes to Fund Requests. */
+export const PCF_VOUCHER_LIMIT = 5000
+
 export interface PcfFund {
   id: string
   branch_id: string
@@ -38,6 +41,7 @@ export interface PcfVoucher {
   updated_at: string
   deleted_at: string | null
   creator?: Pick<Profile, 'id' | 'full_name'> | null
+  fund?: { branch_id: string } | null
 }
 
 export interface PcfReplenishment {
@@ -114,6 +118,25 @@ export async function fetchVouchers(fundId?: string): Promise<PcfVoucher[]> {
   const { data, error } = await q
   if (error) throw error
   return (data as PcfVoucher[]) ?? []
+}
+
+/** Every voucher receipt for a branch, newest first (used by Liquidations). */
+export async function fetchBranchVouchers(branchId: string): Promise<PcfVoucher[]> {
+  const { data, error } = await supabase
+    .from('pcf_vouchers')
+    .select('*, fund:pcf_funds!inner(branch_id)')
+    .eq('fund.branch_id', branchId)
+    .is('deleted_at', null)
+    .order('voucher_date', { ascending: false })
+  if (error) throw error
+  return (data as PcfVoucher[]) ?? []
+}
+
+/** Short-lived signed URL for a receipt stored in the private pcf-receipts bucket. */
+export async function pcfReceiptUrl(path: string): Promise<string | null> {
+  const { data, error } = await supabase.storage.from('pcf-receipts').createSignedUrl(path, 3600)
+  if (error) throw error
+  return data?.signedUrl ?? null
 }
 
 export async function createVoucher(input: {

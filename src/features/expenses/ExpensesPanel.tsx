@@ -33,7 +33,8 @@ interface Expense {
   category?: ExpenseCategory | null
 }
 
-export function ExpensesPage() {
+/** The Expenses screen, also embedded as a tab inside Petty cash. */
+export function ExpensesPanel() {
   const { user } = useAuth()
   const role = user!.profile.role
   const canView = canViewExpenses(role)
@@ -109,11 +110,7 @@ export function ExpensesPage() {
   const expensePager = usePaged(filteredExpenses, 10)
 
   if (!canView) {
-    return (
-      <div className="app-page">
-        <div className="error-banner">You do not have access to expenses.</div>
-      </div>
-    )
+    return <div className="error-banner">You do not have access to expenses.</div>
   }
 
   async function onSubmit(event: FormEvent) {
@@ -192,15 +189,7 @@ export function ExpensesPage() {
   }
 
   return (
-    <div className="app-page stack">
-      <div className="page-header">
-        <div>
-          <h1>Expenses</h1>
-          <p>Categories, amounts, and optional receipt photos.</p>
-        </div>
-        {canManage ? <Button onClick={() => setFormOpen(true)}>Add expense</Button> : null}
-      </div>
-
+    <>
       {error && !formOpen ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
 
@@ -221,51 +210,51 @@ export function ExpensesPage() {
           </>
         }
       >
-          <form id="expense-form" className="stack" onSubmit={onSubmit}>
-            {error ? <div className="error-banner">{error}</div> : null}
-            <Field label="Branch" htmlFor="ex-branch">
-              <SelectInput id="ex-branch" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
-                {branchOptions.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </SelectInput>
-            </Field>
-            <Field label="Category" htmlFor="ex-cat">
-              <SelectInput id="ex-cat" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </SelectInput>
-            </Field>
-            <Field label="Date" htmlFor="ex-date">
-              <DateInput id="ex-date" value={date} onChange={setDate} />
-            </Field>
-            <Field label="Amount (₱)" htmlFor="ex-amt">
-              <TextInput
-                id="ex-amt"
-                type="number"
-                min="0.01"
-                step="0.01"
-                inputMode="decimal"
-                required
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-            </Field>
-            <Field label="Payee" htmlFor="ex-payee">
-              <TextInput id="ex-payee" value={payee} onChange={(e) => setPayee(e.target.value)} />
-            </Field>
-            <Field label="Notes" htmlFor="ex-notes">
-              <TextArea id="ex-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
-            </Field>
-            <Field label="Receipt photo" htmlFor="ex-file">
-              <input id="ex-file" type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-            </Field>
-          </form>
+        <form id="expense-form" className="stack" onSubmit={onSubmit}>
+          {error ? <div className="error-banner">{error}</div> : null}
+          <Field label="Branch" htmlFor="ex-branch">
+            <SelectInput id="ex-branch" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+              {branchOptions.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+          <Field label="Category" htmlFor="ex-cat">
+            <SelectInput id="ex-cat" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+          <Field label="Date" htmlFor="ex-date">
+            <DateInput id="ex-date" value={date} onChange={setDate} />
+          </Field>
+          <Field label="Amount (₱)" htmlFor="ex-amt">
+            <TextInput
+              id="ex-amt"
+              type="number"
+              min="0.01"
+              step="0.01"
+              inputMode="decimal"
+              required
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </Field>
+          <Field label="Payee" htmlFor="ex-payee">
+            <TextInput id="ex-payee" value={payee} onChange={(e) => setPayee(e.target.value)} />
+          </Field>
+          <Field label="Notes" htmlFor="ex-notes">
+            <TextArea id="ex-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </Field>
+          <Field label="Receipt photo" htmlFor="ex-file">
+            <input id="ex-file" type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </Field>
+        </form>
       </Modal>
 
       <Card title="Filters" className="no-print">
@@ -307,6 +296,7 @@ export function ExpensesPage() {
       <Card
         title="Expense list"
         subtitle={`${filteredExpenses.length} entr${filteredExpenses.length === 1 ? 'y' : 'ies'} · Total ${formatPhp(filteredTotal)}`}
+        action={canManage ? <Button onClick={() => setFormOpen(true)}>Add expense</Button> : undefined}
       >
         {filteredExpenses.length === 0 ? (
           <div className="empty-state">No expenses in this range.</div>
@@ -352,6 +342,6 @@ export function ExpensesPage() {
           noun="expense"
         />
       </Card>
-    </div>
+    </>
   )
 }

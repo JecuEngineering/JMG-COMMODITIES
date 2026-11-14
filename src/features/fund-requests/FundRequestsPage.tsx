@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
@@ -15,10 +16,12 @@ import {
   canApproveFundRequest,
   canCreateFundRequest,
   canReleaseFundRequest,
+  canRequestPcfFund,
   canReviewFundRequest,
   canViewAllBranchesFundRequests,
   canViewFundRequests,
 } from '../../lib/roles'
+import { fetchFundBalances, type PcfFundBalance } from '../pcf/pcfApi'
 import {
   approveFundRequest,
   createFundRequest,
@@ -33,6 +36,7 @@ import {
   type FundRequestType,
   type ReleaseMethod,
 } from './fundRequestsApi'
+import { RequestFundPanel } from './RequestFundPanel'
 
 const CATEGORIES = ['Supplies', 'Transportation', 'Equipment', 'Repairs', 'Utilities', 'Food', 'Other']
 
@@ -63,10 +67,11 @@ const STATUS_COLORS: Record<FundRequest['status'], string> = {
   rejected: 'var(--color-danger)',
 }
 
-type TabId = 'mine' | 'review' | 'approve' | 'release' | 'all'
+type TabId = 'mine' | 'rfh' | 'review' | 'approve' | 'release' | 'all'
 
 export function FundRequestsPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
   const role = user!.profile.role
   const profileBranchId = user!.profile.branch_id
   const canView = canViewFundRequests(role)
@@ -74,10 +79,14 @@ export function FundRequestsPage() {
   const canReview = canReviewFundRequest(role)
   const canApprove = canApproveFundRequest(role)
   const canRelease = canReleaseFundRequest(role)
+  const canRequestPcf = canRequestPcfFund(role)
   const canViewAll = canViewAllBranchesFundRequests(role)
 
-  const [tab, setTab] = useState<TabId>('mine')
+  const [tab, setTab] = useState<TabId>(() =>
+    searchParams.get('tab') === 'rfh' && canRequestPcf ? 'rfh' : 'mine',
+  )
   const [requests, setRequests] = useState<FundRequest[]>([])
+  const [funds, setFunds] = useState<PcfFundBalance[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [steps, setSteps] = useState<FundRequestStep[]>([])
 
@@ -103,14 +112,18 @@ export function FundRequestsPage() {
     setLoading(true)
     setError(null)
     try {
-      const r = await fetchFundRequests()
+      const [r, f] = await Promise.all([
+        fetchFundRequests(),
+        canRequestPcf ? fetchFundBalances() : Promise.resolve([] as PcfFundBalance[]),
+      ])
       setRequests(r)
+      setFunds(f)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [canRequestPcf])
 
   useEffect(() => {
     if (canView) void load()
@@ -132,6 +145,8 @@ export function FundRequestsPage() {
     switch (tab) {
       case 'mine':
         return requests.filter((r) => r.requester_id === user!.id)
+      case 'rfh':
+        return []
       case 'review':
         return requests.filter((r) => r.status === 'submitted')
       case 'approve':
@@ -295,6 +310,7 @@ export function FundRequestsPage() {
 
   const tabs: { id: TabId; label: string; show: boolean }[] = [
     { id: 'mine', label: 'My requests', show: true },
+    { id: 'rfh', label: 'Petty cash RFH', show: canRequestPcf },
     { id: 'review', label: `For review${canReview ? ` (${requests.filter((r) => r.status === 'submitted').length})` : ''}`, show: canReview },
     { id: 'approve', label: `For approval${canApprove ? ` (${requests.filter((r) => r.status === 'forwarded').length})` : ''}`, show: canApprove },
     { id: 'release', label: `For release${canRelease ? ` (${requests.filter((r) => r.status === 'approved').length})` : ''}`, show: canRelease },
@@ -303,7 +319,7 @@ export function FundRequestsPage() {
 
   return (
     <div className="app-page stack">
-      <div className="page-header">
+      <div className="page-header no-print">
         <div>
           <h1>Fund Requests</h1>
           <p>Request → BA review → Owner approve → GA release → Liquidation.</p>
@@ -314,13 +330,15 @@ export function FundRequestsPage() {
       {error && !requestOpen ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
 
-      <ChipRow>
-        {tabs.filter((t) => t.show).map((t) => (
-          <Chip key={t.id} active={tab === t.id} onClick={() => { setTab(t.id); setSelectedId(null) }}>
-            {t.label}
-          </Chip>
-        ))}
-      </ChipRow>
+      <div className="no-print">
+        <ChipRow>
+          {tabs.filter((t) => t.show).map((t) => (
+            <Chip key={t.id} active={tab === t.id} onClick={() => { setTab(t.id); setSelectedId(null) }}>
+              {t.label}
+            </Chip>
+          ))}
+        </ChipRow>
+      </div>
 
       {canCreate && tab === 'mine' ? (
         <Modal
@@ -382,6 +400,9 @@ export function FundRequestsPage() {
 
       {loading && requests.length === 0 ? <SkeletonTable rows={5} cols={5} /> : null}
 
+      {tab === 'rfh' ? (
+        <RequestFundPanel funds={funds} onCreated={load} />
+      ) : (
       <Card
         title={`Requests (${filtered.length})`}
         action={
@@ -442,6 +463,7 @@ export function FundRequestsPage() {
           noun="request"
         />
       </Card>
+      )}
 
       {selected ? (
         <Card

@@ -188,6 +188,17 @@
   min-width: 170px;
 }
 
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-jade);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .pcf-tabs {
   display: flex;
   gap: 2px;

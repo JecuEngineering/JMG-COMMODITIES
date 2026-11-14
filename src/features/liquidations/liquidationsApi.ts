@@ -10,6 +10,7 @@ export interface LiquidationItem {
   category: string
   description: string
   amount: number
+  pcf_voucher_id: string | null
 }
 
 export interface Liquidation {
@@ -72,6 +73,7 @@ export async function addLiquidationItem(input: {
   category: string
   description: string
   amount: number
+  pcfVoucherId?: string | null
 }): Promise<void> {
   const { error } = await supabase.from('liquidation_items').insert({
     liquidation_id: input.liquidationId,
@@ -79,6 +81,7 @@ export async function addLiquidationItem(input: {
     category: input.category,
     description: input.description,
     amount: input.amount,
+    pcf_voucher_id: input.pcfVoucherId || null,
   })
   if (error) throw error
 }

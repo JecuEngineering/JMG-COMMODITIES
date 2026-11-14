@@ -11,6 +11,11 @@ import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchFundRequests, type FundRequest } from '../fund-requests/fundRequestsApi'
+import {
+  fetchBranchVouchers,
+  pcfReceiptUrl,
+  type PcfVoucher,
+} from '../pcf/pcfApi'
 import { formatDate, todayInputValue } from '../../lib/dates'
 import { downloadCsv } from '../../lib/export'
 import { formatPhp } from '../../lib/money'
@@ -18,6 +23,7 @@ import {
   canPrepareLiquidation,
   canViewAllBranchesFundRequests,
   canViewLiquidations,
+  canViewPcf,
 } from '../../lib/roles'
 import {
   addLiquidationItem,
@@ -39,11 +45,13 @@ export function LiquidationsPage() {
   const role = user!.profile.role
   const canView = canViewLiquidations(role)
   const canPrepare = canPrepareLiquidation(role)
+  const canLinkReceipts = canViewPcf(role)
   const canViewAll = canViewAllBranchesFundRequests(role)
 
   const [tab, setTab] = useState<TabId>('open')
   const [requests, setRequests] = useState<FundRequest[]>([])
   const [liquidations, setLiquidations] = useState<Liquidation[]>([])
+  const [branchVouchers, setBranchVouchers] = useState<PcfVoucher[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -85,6 +93,44 @@ export function LiquidationsPage() {
   const selectedItems = selected?.items ?? []
   const expensed = liquidationItemTotal(selectedItems)
   const requested = Number(selected?.requested_amount ?? 0)
+
+  useEffect(() => {
+    if (!selected || !canLinkReceipts) {
+      setBranchVouchers([])
+      return
+    }
+    let active = true
+    fetchBranchVouchers(selected.branch_id)
+      .then((rows) => {
+        if (active) setBranchVouchers(rows)
+      })
+      .catch((e) => {
+        if (active) setError(e instanceof Error ? e.message : String(e))
+      })
+    return () => {
+      active = false
+    }
+  }, [selectedId, selected?.branch_id, canLinkReceipts])
+
+  const voucherById = useMemo(
+    () => new Map(branchVouchers.map((v) => [v.id, v])),
+    [branchVouchers],
+  )
+
+  const linkedVoucherIds = useMemo(
+    () =>
+      new Set(
+        selectedItems
+          .map((item) => item.pcf_voucher_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    [selectedItems],
+  )
+
+  const linkableVouchers = useMemo(
+    () => branchVouchers.filter((v) => !linkedVoucherIds.has(v.id)),
+    [branchVouchers, linkedVoucherIds],
+  )
 
   useEffect(() => {
     if (!selected) {
@@ -193,6 +239,40 @@ export function LiquidationsPage() {
     if (!window.confirm('Remove this expense line?')) return
     try {
       await deleteLiquidationItem(id)
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function openVoucherReceipt(path: string) {
+    setError(null)
+    try {
+      const url = await pcfReceiptUrl(path)
+      if (!url) {
+        setError('Receipt could not be opened.')
+        return
+      }
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function onAddVoucher(v: PcfVoucher) {
+    if (!selected || selected.status !== 'draft' || !canPrepare) return
+    setError(null)
+    setMessage(null)
+    try {
+      await addLiquidationItem({
+        liquidationId: selected.id,
+        expenseDate: v.voucher_date,
+        category: v.category || 'Other',
+        description: v.purpose ? `${v.payee} — ${v.purpose}` : v.payee,
+        amount: Number(v.amount),
+        pcfVoucherId: v.id,
+      })
+      setMessage('Voucher added as an expense line.')
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -523,25 +603,43 @@ export function LiquidationsPage() {
                   <th>Category</th>
                   <th>Description</th>
                   <th>Amount</th>
+                  <th>Receipt</th>
                   {selected.status === 'draft' && canPrepare ? <th /> : null}
                 </tr>
               </thead>
               <tbody>
-                {selectedItems.map((item) => (
-                  <tr key={item.id}>
-                    <td>{formatDate(item.expense_date)}</td>
-                    <td>{item.category}</td>
-                    <td>{item.description}</td>
-                    <td>{formatPhp(item.amount)}</td>
-                    {selected.status === 'draft' && canPrepare ? (
+                {selectedItems.map((item) => {
+                  const voucher = item.pcf_voucher_id
+                    ? voucherById.get(item.pcf_voucher_id)
+                    : undefined
+                  return (
+                    <tr key={item.id}>
+                      <td>{formatDate(item.expense_date)}</td>
+                      <td>{item.category}</td>
+                      <td>{item.description}</td>
+                      <td>{formatPhp(item.amount)}</td>
                       <td>
-                        <Button variant="danger" onClick={() => void onDeleteItem(item.id)}>
-                          Remove
-                        </Button>
+                        {voucher?.receipt_path ? (
+                          <Button
+                            variant="ghost"
+                            onClick={() => void openVoucherReceipt(voucher.receipt_path!)}
+                          >
+                            View
+                          </Button>
+                        ) : (
+                          '—'
+                        )}
                       </td>
-                    ) : null}
-                  </tr>
-                ))}
+                      {selected.status === 'draft' && canPrepare ? (
+                        <td>
+                          <Button variant="danger" onClick={() => void onDeleteItem(item.id)}>
+                            Remove
+                          </Button>
+                        </td>
+                      ) : null}
+                    </tr>
+                  )
+                })}
               </tbody>
               <tfoot>
                 <tr>
@@ -551,11 +649,75 @@ export function LiquidationsPage() {
                   <td>
                     <strong>{formatPhp(expensed)}</strong>
                   </td>
+                  <td />
                   {selected.status === 'draft' && canPrepare ? <td /> : null}
                 </tr>
               </tfoot>
             </Table>
           )}
+
+          {canLinkReceipts ? (
+            <div style={{ marginTop: 20 }}>
+              <h3>Petty cash receipts</h3>
+              <p className="faint">
+                Vouchers from this branch. Add them as expense lines so the liquidation matches the
+                receipts.
+                {linkableVouchers.length > 0
+                  ? ` ${linkableVouchers.length} not yet linked.`
+                  : ''}
+              </p>
+              {branchVouchers.length === 0 ? (
+                <div className="empty-state">No petty cash vouchers for this branch yet.</div>
+              ) : (
+                <Table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Payee</th>
+                      <th>Category</th>
+                      <th>Amount</th>
+                      <th>Receipt</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {branchVouchers.map((v) => {
+                      const linked = linkedVoucherIds.has(v.id)
+                      return (
+                        <tr key={v.id}>
+                          <td>{formatDate(v.voucher_date)}</td>
+                          <td>{v.payee}</td>
+                          <td>{v.category ?? '—'}</td>
+                          <td>{formatPhp(v.amount)}</td>
+                          <td>
+                            {v.receipt_path ? (
+                              <Button
+                                variant="ghost"
+                                onClick={() => void openVoucherReceipt(v.receipt_path!)}
+                              >
+                                View
+                              </Button>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td>
+                            {linked ? (
+                              <Badge tone="muted">Linked</Badge>
+                            ) : selected.status === 'draft' && canPrepare ? (
+                              <Button variant="secondary" onClick={() => void onAddVoucher(v)}>
+                                Add as line
+                              </Button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </Table>
+              )}
+            </div>
+          ) : null}
 
           {selected.status === 'draft' && canPrepare ? (
             <>

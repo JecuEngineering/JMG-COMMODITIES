@@ -1,5 +1,16 @@
 # Changelog
 
+## Petty cash rules, expenses inside PCF, RFH into Fund Requests (2026-11-15)
+
+- **Cebu fund ₱50,000**: migration `202611150020_pcf_rules_and_cebu_fund.sql` (applied) sets the Cebu branch petty cash fund to **50,000.00** (Main stays 10,000.00). Confirmed on production.
+- **₱5,000 voucher cap**: a `pcf_voucher_limit` trigger rejects anything above 5,000, and the New money out form validates the same limit with an inline hint and a **Fund Requests** link. Larger expenses belong in the fund-request module.
+- **Expenses is now a Petty cash tab**: the former Expenses screen is the embeddable `ExpensesPanel` (`src/features/expenses/ExpensesPanel.tsx`) shown as the **Expenses** tab in Petty cash — same filters, form, receipt upload, Excel/CSV/print and pagination. `/app/expenses` redirects to `/app/pcf` and the separate Expenses menu item is gone.
+- **Request for fund moved**: the RFH paper form left Petty cash and now lives in Fund Requests as the **Petty cash RFH** tab (BA/Owner/GA, `src/features/fund-requests/RequestFundPanel.tsx`). It keeps RFH #, purpose, expense period, PCF funding, approvers, released date/thru, additional lines, category totals, receipt review, Excel and print; **Create fund request** saves it as a draft cash advance for the current branch.
+- **Record tab removed, merged into Report**: **Report** now carries the monitoring period (from/to, opening/expenses/replenishments/balance), the **Petty cash monitoring** sheet with signatures, the summary totals and both Excel exports plus Print/PDF. The separate Record tab is gone.
+- **Receipts in history and liquidation**: Vouchers, Report and the recent-voucher list have a **Receipt** column with a signed-URL View link. Liquidations shows the branch's PCF vouchers with receipts and an **Add as line** action; linked lines show the receipt and store `liquidation_items.pcf_voucher_id` (added in migration 020, unique), so expenses + returned amount can be balanced against the released amount.
+- **Permissions**: `can_create_fund_request` now includes **branch_accountant** (DB + `src/lib/roles.ts`), matching the BA's role of preparing the replenishment RFH.
+- **Verification**: `npx tsc -b` and `npx vite build` pass; production verified (Cebu 50,000.00, Main 10,000.00, `liquidation_items.pcf_voucher_id` present). The authenticated screens could not be clicked through in the in-app browser (no live staff session), so the visual check is limited to the build and the production schema.
+
 ## Searchable customer, DR on new sale, paginated lists and a real date picker (2026-11-15)
 
 - **Customer search**: the New Sale customer field is now a combobox — type part of a name or contact number and pick from the filtered list (`src/components/Combobox.tsx`, arrow keys/Enter/Escape supported). Quick add stays underneath.
