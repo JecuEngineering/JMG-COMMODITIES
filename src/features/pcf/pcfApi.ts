@@ -4,6 +4,42 @@ import type { Branch, Profile } from '../../types/database'
 /** Petty cash covers everyday small expenses; anything above this goes to Fund Requests. */
 export const PCF_VOUCHER_LIMIT = 5000
 
+/** Account classifications of the company's petty cash monitoring sheet. */
+export const PCF_CLASSIFICATIONS = [
+  'TRANSPORTATION/MEALS/TOLLS',
+  'MEALS AND INTERTAINMENT',
+  'EMPLOYEE BENEFITS',
+  'COMMUNICATION',
+  'SUPPLIES & JANITORIALS',
+  'UTILITIES',
+  'COURIER SERVICE',
+  'REPAIR & MAINTENANCE',
+  'TAXES & LICENSES',
+  'CONTAINER CHARGES',
+  'OTHER TOOLS &EQUIPMENTS',
+  'Bank Charges',
+  'GAS & OIL',
+  'DISKARGA',
+  'AR EMPLOYEE/ CASH OUT',
+  'MEDICINES AND OTHERS',
+] as const
+
+/** Map free-text/legacy categories onto a monitoring-sheet column. */
+export function pcfClassification(category: string | null): string {
+  const value = (category ?? '').trim()
+  const exact = PCF_CLASSIFICATIONS.find((c) => c.toLowerCase() === value.toLowerCase())
+  if (exact) return exact
+  const legacy: Record<string, (typeof PCF_CLASSIFICATIONS)[number]> = {
+    supplies: 'SUPPLIES & JANITORIALS',
+    transportation: 'TRANSPORTATION/MEALS/TOLLS',
+    repairs: 'REPAIR & MAINTENANCE',
+    utilities: 'UTILITIES',
+    food: 'MEALS AND INTERTAINMENT',
+    other: 'MEDICINES AND OTHERS',
+  }
+  return legacy[value.toLowerCase()] ?? 'MEDICINES AND OTHERS'
+}
+
 export interface PcfFund {
   id: string
   branch_id: string
@@ -30,6 +66,7 @@ export interface PcfFundBalance extends PcfFund {
 export interface PcfVoucher {
   id: string
   fund_id: string
+  voucher_no: string | null
   voucher_date: string
   payee: string
   purpose: string | null

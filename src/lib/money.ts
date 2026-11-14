@@ -12,6 +12,16 @@ export function formatPhp(amount: number | string | null | undefined): string {
     .replace('PHP', '₱')
 }
 
+/** Plain 2-decimal amount, no currency symbol (report cells). */
+export function formatAmount(amount: number | string | null | undefined): string {
+  const value = Number(amount ?? 0)
+  if (Number.isNaN(value)) return '0.00'
+  return new Intl.NumberFormat('en-PH', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
 /** Parse user input into a 2-decimal money number for display/forms. */
 export function parseMoneyInput(raw: string): number | null {
   const cleaned = raw.replace(/,/g, '').trim()

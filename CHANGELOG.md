@@ -1,5 +1,14 @@
 # Changelog
 
+## PCF liquidation report in the monitoring-sheet format + November data (2026-11-15)
+
+- **Vouchers = Expenses, merged**: the two duplicate tabs are one **Expenses** ledger in Petty cash (PCV#, date, description, classification, purpose, amount, receipt, replenished status) with date/classification/search filters, totals, Excel/CSV/print and pagination. The old `src/features/expenses/ExpensesPanel.tsx` is removed; `/app/expenses` still redirects to `/app/pcf`.
+- **Report = PETTY CASH MONITORING matrix**: the report now mirrors the company workbook — DATE · PCV# · DESCRIPTION · the 16 ACCOUNT CLASSIFICATION columns · AMOUNT, dates grouped per day, per-classification totals and a grand total, fund/period-expenses/balance header, Prepared/Custodian/Approved signatures. **Export liquidation Excel** writes the same matrix; **Print/PDF** prints only the sheet on one A4 landscape page (named `pcf-landscape` page rule); receipt links stay on screen.
+- **Stable PCV numbers**: migration `202611150021_pcf_liquidation_cebu_november.sql` (applied) adds `pcf_vouchers.voucher_no`, unique per fund, assigned by the `pcf_voucher_assign_no` trigger (`PCV-0001`, `PCV-0002`, …). Existing rows were numbered; the trigger was exercised in a rolled-back insert (`PCV-0030`).
+- **November 9–14 Cebu data**: the same migration imported the **NOVEMBER 9-** sheet — **29 vouchers, ₱17,339**, PCV-0001…PCV-0029, mapped onto the sheet's classifications (transport 1,515 · meals 4,991 · supplies 264 · utilities 250 · repairs 815 · taxes 2,500 · container 3,050 · bank 54 · gas & oil 400 · diskarga 3,000 · AR employee 500). Cebu balance is now **₱32,661** of its ₱50,000 fund.
+- **Classification picker**: new expenses use the 16 official account classifications (legacy categories map onto them for display), so new entries land in the right report column.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass; production shows Cebu 29 vouchers / ₱17,339, Main none. The report was rendered with the imported rows and printed to a 1-page A4 landscape PDF. The authenticated screen was not clicked through (no staff login in the in-app browser).
+
 ## Petty cash rules, expenses inside PCF, RFH into Fund Requests (2026-11-15)
 
 - **Cebu fund ₱50,000**: migration `202611150020_pcf_rules_and_cebu_fund.sql` (applied) sets the Cebu branch petty cash fund to **50,000.00** (Main stays 10,000.00). Confirmed on production.

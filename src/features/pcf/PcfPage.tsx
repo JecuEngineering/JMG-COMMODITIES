@@ -9,16 +9,16 @@ import { Modal } from '../../components/Modal'
 import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
-import { ExpensesPanel } from '../expenses/ExpensesPanel'
 import { useCompanySettings } from '../settings/useCompanySettings'
 import { formatDate, todayInputValue } from '../../lib/dates'
-import { downloadExcel, printPage } from '../../lib/export'
-import { formatPhp } from '../../lib/money'
+import { downloadCsv, downloadExcel, printPage } from '../../lib/export'
+import { formatAmount, formatPhp } from '../../lib/money'
 import { ROLE_LABELS, canManagePcf, canReplenishPcf, canRequestPcfFund, canViewAllBranchesPcf, canViewPcf } from '../../lib/roles'
 import { supabase } from '../../lib/supabase'
 import type { Branch } from '../../types/database'
 import { fetchBranches } from '../inventory/inventoryApi'
 import {
+  PCF_CLASSIFICATIONS,
   PCF_VOUCHER_LIMIT,
   createFund,
   createReplenishment,
@@ -27,6 +27,7 @@ import {
   fetchReplenishments,
   fetchUnrecoveredVouchers,
   fetchVouchers,
+  pcfClassification,
   pcfReceiptUrl,
   type PcfFundBalance,
   type PcfReplenishment,
@@ -34,15 +35,12 @@ import {
 } from './pcfApi'
 import './pcf.css'
 
-const PCF_CATEGORIES = ['Supplies', 'Transportation', 'Repairs', 'Utilities', 'Food', 'Other']
-
-type TabId = 'funds' | 'vouchers' | 'replenish' | 'expenses' | 'report'
+type TabId = 'funds' | 'vouchers' | 'replenish' | 'report'
 
 const TABS: { id: TabId; label: string; needs?: 'replenish' }[] = [
   { id: 'funds', label: 'Funds' },
-  { id: 'vouchers', label: 'Vouchers' },
+  { id: 'vouchers', label: 'Expenses' },
   { id: 'replenish', label: 'Replenishments', needs: 'replenish' },
-  { id: 'expenses', label: 'Expenses' },
   { id: 'report', label: 'Report' },
 ]
 
@@ -61,6 +59,13 @@ function longDate(date: string) {
   return d
     .toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
     .toUpperCase()
+}
+
+/** M/D/YYYY, the date style of the monitoring sheet. */
+function sheetDate(date: string) {
+  if (!date) return ''
+  const [y, m, d] = date.split('-')
+  return `${Number(m)}/${Number(d)}/${y}`
 }
 
 export function PcfPage() {
@@ -90,10 +95,13 @@ export function PcfPage() {
   const [fundOpen, setFundOpen] = useState(false)
   const [voucherOpen, setVoucherOpen] = useState(false)
   const [replenishOpen, setReplenishOpen] = useState(false)
-  const [vCategory, setVCategory] = useState(PCF_CATEGORIES[0])
+  const [vCategory, setVCategory] = useState<string>(PCF_CLASSIFICATIONS[4])
   const [vAmount, setVAmount] = useState('')
   const [vFile, setVFile] = useState<File | null>(null)
   const [voucherSearch, setVoucherSearch] = useState('')
+  const [voucherFrom, setVoucherFrom] = useState(monthStart)
+  const [voucherTo, setVoucherTo] = useState(todayInputValue)
+  const [voucherCategory, setVoucherCategory] = useState('')
 
   // Replenishment form
   const [rAmount, setRAmount] = useState('')
@@ -183,50 +191,50 @@ export function PcfPage() {
   const recordFromValue = recordFrom ?? monthStart()
   const recordToValue = recordTo ?? todayInputValue()
 
-  const recordEntries = useMemo(() => {
-    const inRange = (date: string) => date >= recordFromValue && date <= recordToValue
-    const vs = vouchers
-      .filter((v) => inRange(v.voucher_date))
-      .slice()
-      .sort((a, b) => a.voucher_date.localeCompare(b.voucher_date))
-    const rs = replenishments
-      .filter((r) => inRange(r.replenishment_date))
-      .slice()
-      .sort((a, b) => a.replenishment_date.localeCompare(b.replenishment_date))
-    const rows = [
-      ...vs.map((v, index) => ({
-        key: `v-${v.id}`,
-        date: v.voucher_date,
-        ref: `V-${String(index + 1).padStart(4, '0')}`,
-        particulars: v.payee,
-        category: v.category ?? '',
-        expense: Number(v.amount),
-        replenishment: 0,
-      })),
-      ...rs.map((r) => ({
-        key: `r-${r.id}`,
-        date: r.replenishment_date,
-        ref: r.reference_no || 'Replenishment',
-        particulars: r.notes || 'Fund replenishment',
-        category: '',
-        expense: 0,
-        replenishment: Number(r.amount),
-      })),
-    ]
-    rows.sort((a, b) => a.date.localeCompare(b.date) || a.ref.localeCompare(b.ref))
-    let balance = Number(selectedFund?.fund_amount ?? 0)
-    return rows.map((row) => {
-      balance = balance - row.expense + row.replenishment
-      return { ...row, balance }
-    })
-  }, [vouchers, replenishments, recordFromValue, recordToValue, selectedFund])
+  const periodVouchers = useMemo(
+    () =>
+      vouchers
+        .filter((v) => v.voucher_date >= recordFromValue && v.voucher_date <= recordToValue)
+        .slice()
+        .sort(
+          (a, b) =>
+            a.voucher_date.localeCompare(b.voucher_date) ||
+            (a.voucher_no ?? '').localeCompare(b.voucher_no ?? '') ||
+            a.created_at.localeCompare(b.created_at),
+        ),
+    [vouchers, recordFromValue, recordToValue],
+  )
 
-  const recordTotals = useMemo(() => {
-    const expense = recordEntries.reduce((s, r) => s + r.expense, 0)
-    const replenishment = recordEntries.reduce((s, r) => s + r.replenishment, 0)
+  const liquidationRows = useMemo(() => {
+    let lastDate = ''
+    return periodVouchers.map((voucher) => {
+      const showDate = voucher.voucher_date !== lastDate
+      lastDate = voucher.voucher_date
+      return {
+        voucher,
+        classification: pcfClassification(voucher.category),
+        amount: Number(voucher.amount),
+        showDate,
+      }
+    })
+  }, [periodVouchers])
+
+  const classTotals = useMemo(() => {
+    const totals = new Map<string, number>(PCF_CLASSIFICATIONS.map((c) => [c, 0]))
+    for (const row of liquidationRows) {
+      totals.set(row.classification, (totals.get(row.classification) ?? 0) + row.amount)
+    }
+    return totals
+  }, [liquidationRows])
+
+  const periodTotals = useMemo(() => {
+    const expense = liquidationRows.reduce((sum, row) => sum + row.amount, 0)
+    const replenishment = replenishments
+      .filter((r) => r.replenishment_date >= recordFromValue && r.replenishment_date <= recordToValue)
+      .reduce((sum, r) => sum + Number(r.amount), 0)
     const opening = Number(selectedFund?.fund_amount ?? 0)
-    return { expense, replenishment, opening, closing: opening - expense + replenishment }
-  }, [recordEntries, selectedFund])
+    return { expense, replenishment, opening, closing: opening + replenishment - expense }
+  }, [liquidationRows, replenishments, recordFromValue, recordToValue, selectedFund])
 
   const voucherNumbers = useMemo(() => {
     const sorted = vouchers
@@ -240,6 +248,11 @@ export function PcfPage() {
   }, [vouchers])
 
   const searchTerm = voucherSearch.trim().toLowerCase()
+  const voucherRef = useCallback(
+    (voucher: PcfVoucher) => voucher.voucher_no ?? voucherNumbers.get(voucher.id) ?? '',
+    [voucherNumbers],
+  )
+
   const recentVouchers = useMemo(
     () =>
       vouchers.filter(
@@ -251,11 +264,30 @@ export function PcfPage() {
     [vouchers, searchTerm],
   )
 
+  const filteredVouchers = useMemo(
+    () =>
+      vouchers.filter((v) => {
+        if (voucherFrom && v.voucher_date < voucherFrom) return false
+        if (voucherTo && v.voucher_date > voucherTo) return false
+        if (voucherCategory && pcfClassification(v.category) !== voucherCategory) return false
+        if (!searchTerm) return true
+        return (
+          v.payee.toLowerCase().includes(searchTerm) ||
+          (v.purpose ?? '').toLowerCase().includes(searchTerm) ||
+          (v.voucher_no ?? '').toLowerCase().includes(searchTerm)
+        )
+      }),
+    [vouchers, voucherFrom, voucherTo, voucherCategory, searchTerm],
+  )
+
+  const filteredVoucherTotal = useMemo(
+    () => filteredVouchers.reduce((sum, v) => sum + Number(v.amount), 0),
+    [filteredVouchers],
+  )
+
   const recentPager = usePaged(recentVouchers, 10)
-  const voucherPager = usePaged(vouchers, 10)
+  const voucherPager = usePaged(filteredVouchers, 15)
   const replenishPager = usePaged(replenishments, 10)
-  const reportVoucherPager = usePaged(vouchers, 10)
-  const reportReplenishPager = usePaged(replenishments, 10)
 
   if (!canView) {
     return (
@@ -427,39 +459,66 @@ export function PcfPage() {
     }
   }
 
-  function exportRecordExcel() {
+  function exportLiquidationExcel() {
     downloadExcel(
-      `pcf-record-${branchLabel.replace(/\s+/g, '-')}-${recordFromValue}-to-${recordToValue}.xls`,
-      'PCF Record',
-      ['Date', 'Ref', 'Particulars', 'Category', 'Expenses', 'Replenishment', 'Balance'],
+      `pcf-liquidation-${branchLabel.replace(/\s+/g, '-')}-${recordFromValue}-to-${recordToValue}.xls`,
+      'PCF Liquidation',
+      ['DATE', 'PCV#', 'DESCRIPTION', ...PCF_CLASSIFICATIONS, 'AMOUNT'],
       [
-        ['', '', 'Opening fund', '', '', '', recordTotals.opening.toFixed(2)],
-        ...recordEntries.map((r) => [
-          r.date,
-          r.ref,
-          r.particulars,
-          r.category,
-          r.expense ? r.expense.toFixed(2) : '',
-          r.replenishment ? r.replenishment.toFixed(2) : '',
-          r.balance.toFixed(2),
+        ...liquidationRows.map((row) => [
+          sheetDate(row.voucher.voucher_date),
+          voucherRef(row.voucher),
+          row.voucher.payee,
+          ...PCF_CLASSIFICATIONS.map((c) => (c === row.classification ? row.amount.toFixed(2) : '')),
+          row.amount.toFixed(2),
         ]),
-        ['', '', 'TOTAL', '', recordTotals.expense.toFixed(2), recordTotals.replenishment.toFixed(2), recordTotals.closing.toFixed(2)],
+        [
+          '',
+          '',
+          'TOTAL',
+          ...PCF_CLASSIFICATIONS.map((c) => {
+            const total = classTotals.get(c) ?? 0
+            return total ? total.toFixed(2) : ''
+          }),
+          periodTotals.expense.toFixed(2),
+        ],
       ],
     )
   }
 
-  function exportReportExcel() {
+  function exportExpensesExcel() {
     downloadExcel(
-      `pcf-report-${branchLabel.replace(/\s+/g, '-')}-${recordFromValue}-to-${recordToValue}.xls`,
-      'PCF Report',
-      ['Item', 'Date', 'Payee / Reference', 'Category', 'Amount'],
+      `pcf-expenses-${branchLabel.replace(/\s+/g, '-')}-${voucherFrom || 'start'}-to-${voucherTo || 'today'}.xls`,
+      'PCF Expenses',
+      ['DATE', 'PCV#', 'DESCRIPTION', 'PURPOSE', 'CLASSIFICATION', 'AMOUNT'],
       [
-        ['Opening fund', '', '', '', Number(selectedFund?.fund_amount ?? 0).toFixed(2)],
-        ...vouchers.map((v) => ['Voucher', v.voucher_date, v.payee, v.category ?? '', Number(v.amount).toFixed(2)]),
-        ...replenishments.map((r) => ['Replenishment', r.replenishment_date, r.reference_no ?? '', '', Number(r.amount).toFixed(2)]),
-        ['Vouchers total', '', '', '', Number(selectedFund?.vouchers_total ?? 0).toFixed(2)],
-        ['Replenishments total', '', '', '', Number(selectedFund?.replenishments_total ?? 0).toFixed(2)],
-        ['Current balance', '', '', '', Number(selectedFund?.balance ?? 0).toFixed(2)],
+        ...filteredVouchers.map((v) => [
+          v.voucher_date,
+          voucherRef(v),
+          v.payee,
+          v.purpose ?? '',
+          pcfClassification(v.category),
+          Number(v.amount).toFixed(2),
+        ]),
+        ['', '', '', '', 'TOTAL', filteredVoucherTotal.toFixed(2)],
+      ],
+    )
+  }
+
+  function exportExpensesCsv() {
+    downloadCsv(
+      `pcf-expenses-${branchLabel.replace(/\s+/g, '-')}-${voucherFrom || 'start'}-to-${voucherTo || 'today'}.csv`,
+      ['DATE', 'PCV#', 'DESCRIPTION', 'PURPOSE', 'CLASSIFICATION', 'AMOUNT'],
+      [
+        ...filteredVouchers.map((v) => [
+          v.voucher_date,
+          voucherRef(v),
+          v.payee,
+          v.purpose ?? '',
+          pcfClassification(v.category),
+          Number(v.amount).toFixed(2),
+        ]),
+        ['', '', '', '', 'TOTAL', filteredVoucherTotal.toFixed(2)],
       ],
     )
   }
@@ -634,7 +693,7 @@ export function PcfPage() {
                     <tbody>
                       {recentPager.pageItems.map((v) => (
                         <tr key={v.id}>
-                          <td className="pcf-cell-ref">{voucherNumbers.get(v.id)}</td>
+                          <td className="pcf-cell-ref">{voucherRef(v)}</td>
                           <td>{formatDate(v.voucher_date)}</td>
                           <td className="pcf-cell-primary">{v.payee}</td>
                           <td>{v.purpose ?? '—'}</td>
@@ -754,36 +813,83 @@ export function PcfPage() {
 
       {tab === 'vouchers' ? (
         <div className="stack">
+          <Card title="Filters" className="no-print">
+            <div className="row" style={{ flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
+              <Field label="From" htmlFor="pcf-ex-from">
+                <DateInput id="pcf-ex-from" value={voucherFrom} onChange={setVoucherFrom} placeholder="Any date" />
+              </Field>
+              <Field label="To" htmlFor="pcf-ex-to">
+                <DateInput id="pcf-ex-to" value={voucherTo} onChange={setVoucherTo} placeholder="Any date" />
+              </Field>
+              <Field label="Classification" htmlFor="pcf-ex-cat">
+                <SelectInput
+                  id="pcf-ex-cat"
+                  value={voucherCategory}
+                  onChange={(e) => setVoucherCategory(e.target.value)}
+                >
+                  <option value="">All classifications</option>
+                  {PCF_CLASSIFICATIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </SelectInput>
+              </Field>
+              <Field label="Search" htmlFor="pcf-ex-search">
+                <TextInput
+                  id="pcf-ex-search"
+                  type="search"
+                  placeholder="Description, purpose or PCV#"
+                  value={voucherSearch}
+                  onChange={(e) => setVoucherSearch(e.target.value)}
+                />
+              </Field>
+            </div>
+            <div className="row" style={{ gap: 8, marginTop: 12 }}>
+              <Button variant="secondary" onClick={exportExpensesExcel}>
+                Export Excel
+              </Button>
+              <Button variant="secondary" onClick={exportExpensesCsv}>
+                Export CSV
+              </Button>
+              <Button variant="ghost" onClick={printPage}>
+                Print / PDF
+              </Button>
+            </div>
+          </Card>
+
           <Card
-            title={`Vouchers (${vouchers.length})`}
+            title="Expense list"
+            subtitle={`${filteredVouchers.length} entr${filteredVouchers.length === 1 ? 'y' : 'ies'} · Total ${formatPhp(filteredVoucherTotal)}`}
             action={
-              canManage && selectedFund ? <Button onClick={() => setVoucherOpen(true)}>New voucher</Button> : null
+              canManage && selectedFund ? <Button onClick={() => setVoucherOpen(true)}>Add expense</Button> : null
             }
           >
-            {vouchers.length === 0 ? (
-              <div className="empty-state">No vouchers yet.</div>
+            {filteredVouchers.length === 0 ? (
+              <div className="empty-state">No expenses in this range.</div>
             ) : (
               <Table>
                 <thead>
                   <tr>
-                    <th>Voucher</th>
                     <th>Date</th>
-                    <th>Payee</th>
-                    <th>Category</th>
+                    <th>PCV#</th>
+                    <th>Description</th>
+                    <th>Classification</th>
                     <th>Purpose</th>
                     <th>Amount</th>
                     <th>Receipt</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {voucherPager.pageItems.map((v) => (
                     <tr key={v.id}>
-                      <td className="pcf-cell-ref">{voucherNumbers.get(v.id)}</td>
                       <td>{formatDate(v.voucher_date)}</td>
-                      <td>{v.payee}</td>
-                      <td>{v.category ?? '—'}</td>
+                      <td className="pcf-cell-ref">{voucherRef(v)}</td>
+                      <td className="pcf-cell-primary">{v.payee}</td>
+                      <td>{pcfClassification(v.category)}</td>
                       <td>{v.purpose ?? '—'}</td>
-                      <td>{formatPhp(v.amount)}</td>
+                      <td className="pcf-cell-amount">{formatPhp(v.amount)}</td>
                       <td>
                         {v.receipt_path ? (
                           <Button variant="ghost" onClick={() => void openReceipt(v.receipt_path!)}>
@@ -793,9 +899,25 @@ export function PcfPage() {
                           '—'
                         )}
                       </td>
+                      <td>
+                        <span className={`pcf-status${unrecoveredIds.has(v.id) ? ' is-pending' : ''}`}>
+                          {unrecoveredIds.has(v.id) ? 'Not replenished' : 'Replenished'}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={5}>
+                      <strong>Total</strong>
+                    </td>
+                    <td className="pcf-cell-amount">
+                      <strong>{formatPhp(filteredVoucherTotal)}</strong>
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
               </Table>
             )}
             <Pagination
@@ -807,7 +929,7 @@ export function PcfPage() {
               end={voucherPager.end}
               onPage={voucherPager.setPage}
               onPageSize={voucherPager.setPageSize}
-              noun="voucher"
+              noun="expense"
             />
           </Card>
         </div>
@@ -858,12 +980,10 @@ export function PcfPage() {
         </div>
       ) : null}
 
-      {tab === 'expenses' ? <ExpensesPanel /> : null}
-
       {tab === 'report' && selectedFund ? (
         <div className="stack">
           <Card title="Monitoring period" className="no-print">
-            <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
+            <div className="row" style={{ flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
               <Field label="From" htmlFor="rec-from">
                 <DateInput
                   id="rec-from"
@@ -888,16 +1008,13 @@ export function PcfPage() {
               </Field>
             </div>
             <p className="faint" style={{ marginTop: 10 }}>
-              Opening {formatPhp(recordTotals.opening)} · Expenses {formatPhp(recordTotals.expense)} ·
-              Replenishments {formatPhp(recordTotals.replenishment)} · Balance{' '}
-              {formatPhp(recordTotals.closing)}
+              {liquidationRows.length} voucher{liquidationRows.length === 1 ? '' : 's'} · Expenses{' '}
+              {formatPhp(periodTotals.expense)} · Replenishments {formatPhp(periodTotals.replenishment)} ·
+              Balance {formatPhp(periodTotals.closing)}
             </p>
             <div className="row" style={{ gap: 8, marginTop: 12 }}>
-              <Button variant="secondary" onClick={exportRecordExcel}>
-                Export monitoring Excel
-              </Button>
-              <Button variant="secondary" onClick={exportReportExcel}>
-                Export summary Excel
+              <Button variant="secondary" onClick={exportLiquidationExcel}>
+                Export liquidation Excel
               </Button>
               <Button variant="ghost" onClick={printPage}>
                 Print / PDF
@@ -905,7 +1022,7 @@ export function PcfPage() {
             </div>
           </Card>
 
-          <div className="pcf-sheet">
+          <div className="pcf-sheet pcf-landscape">
             <header className="pcf-sheet-head">
               <img src={logoSrc} alt="" className="pcf-sheet-logo" />
               <div className="pcf-sheet-company">
@@ -920,53 +1037,87 @@ export function PcfPage() {
               {branchLabel} · {longDate(recordFromValue)} - {longDate(recordToValue)}
             </p>
 
-            <table className="pcf-form-table pcf-record-table">
-              <thead>
-                <tr>
-                  <th>DATE</th>
-                  <th>REF</th>
-                  <th>PARTICULARS</th>
-                  <th>CATEGORY</th>
-                  <th>EXPENSES</th>
-                  <th>REPLENISHMENT</th>
-                  <th>BALANCE</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td colSpan={6} className="pcf-strong">
-                    OPENING FUND
-                  </td>
-                  <td className="pcf-num">{formatPhp(recordTotals.opening)}</td>
-                </tr>
-                {recordEntries.map((r) => (
-                  <tr key={r.key}>
-                    <td>{formatDate(r.date)}</td>
-                    <td>{r.ref}</td>
-                    <td>{r.particulars}</td>
-                    <td>{r.category || '—'}</td>
-                    <td className="pcf-num">{r.expense ? formatPhp(r.expense) : ''}</td>
-                    <td className="pcf-num">{r.replenishment ? formatPhp(r.replenishment) : ''}</td>
-                    <td className="pcf-num">{formatPhp(r.balance)}</td>
-                  </tr>
-                ))}
-                {recordEntries.length === 0 ? (
+            <div className="pcf-sheet-meta">
+              <span>
+                Fund <strong>{formatPhp(selectedFund.fund_amount)}</strong>
+              </span>
+              <span>
+                Period expenses <strong>{formatPhp(periodTotals.expense)}</strong>
+              </span>
+              <span>
+                Balance this period <strong>{formatPhp(periodTotals.closing)}</strong>
+              </span>
+            </div>
+
+            <div className="pcf-matrix-wrap">
+              <table className="pcf-form-table pcf-matrix">
+                <thead>
                   <tr>
-                    <td colSpan={7} className="muted">
-                      No vouchers or replenishments in this period.
-                    </td>
+                    <th rowSpan={2} className="pcf-matrix-date">
+                      DATE
+                    </th>
+                    <th rowSpan={2}>PCV#</th>
+                    <th rowSpan={2}>DESCRIPTION</th>
+                    <th colSpan={PCF_CLASSIFICATIONS.length}>ACCOUNT CLASSIFICATION</th>
+                    <th rowSpan={2}>AMOUNT</th>
                   </tr>
-                ) : null}
-                <tr>
-                  <td colSpan={4} className="pcf-right pcf-strong">
-                    TOTAL
-                  </td>
-                  <td className="pcf-num pcf-strong">{formatPhp(recordTotals.expense)}</td>
-                  <td className="pcf-num pcf-strong">{formatPhp(recordTotals.replenishment)}</td>
-                  <td className="pcf-num pcf-strong">{formatPhp(recordTotals.closing)}</td>
-                </tr>
-              </tbody>
-            </table>
+                  <tr>
+                    {PCF_CLASSIFICATIONS.map((classification) => (
+                      <th key={classification} className="pcf-matrix-cat">
+                        <span>{classification}</span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {liquidationRows.map(({ voucher, classification, amount, showDate }) => (
+                    <tr key={voucher.id}>
+                      <td className="pcf-matrix-date">{showDate ? sheetDate(voucher.voucher_date) : ''}</td>
+                      <td className="pcf-cell-ref">{voucherRef(voucher)}</td>
+                      <td className="pcf-matrix-desc">
+                        {voucher.payee}
+                        {voucher.receipt_path ? (
+                          <button
+                            type="button"
+                            className="pcf-receipt-link no-print"
+                            onClick={() => void openReceipt(voucher.receipt_path!)}
+                          >
+                            receipt
+                          </button>
+                        ) : null}
+                      </td>
+                      {PCF_CLASSIFICATIONS.map((c) => (
+                        <td key={c} className="pcf-num">
+                          {c === classification ? formatAmount(amount) : ''}
+                        </td>
+                      ))}
+                      <td className="pcf-num pcf-strong">{formatAmount(amount)}</td>
+                    </tr>
+                  ))}
+                  {liquidationRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={3 + PCF_CLASSIFICATIONS.length} className="muted">
+                        No vouchers in this period.
+                      </td>
+                    </tr>
+                  ) : null}
+                  <tr>
+                    <td colSpan={3} className="pcf-right pcf-strong">
+                      TOTAL
+                    </td>
+                    {PCF_CLASSIFICATIONS.map((c) => {
+                      const total = classTotals.get(c) ?? 0
+                      return (
+                        <td key={c} className="pcf-num pcf-strong">
+                          {total ? formatAmount(total) : ''}
+                        </td>
+                      )
+                    })}
+                    <td className="pcf-num pcf-strong">{formatAmount(periodTotals.expense)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
             <div className="pcf-signatures">
               <div>
@@ -985,122 +1136,6 @@ export function PcfPage() {
               </div>
             </div>
           </div>
-        </div>
-      ) : null}
-
-      {tab === 'report' && selectedFund ? (
-        <div className="stack">
-          <Card title={`PCF Report — ${selectedFund.branch?.name ?? selectedFund.branch_id}`}>
-            <div className="row" style={{ flexWrap: 'wrap', gap: 24 }}>
-              <div>
-                <p className="muted">Opening fund</p>
-                <strong style={{ fontSize: 20 }}>{formatPhp(selectedFund.fund_amount)}</strong>
-              </div>
-              <div>
-                <p className="muted">Vouchers total</p>
-                <strong style={{ fontSize: 20 }}>{formatPhp(selectedFund.vouchers_total)}</strong>
-              </div>
-              <div>
-                <p className="muted">Replenishments total</p>
-                <strong style={{ fontSize: 20 }}>{formatPhp(selectedFund.replenishments_total)}</strong>
-              </div>
-              <div>
-                <p className="muted">Current balance</p>
-                <strong style={{ fontSize: 20 }}>{formatPhp(selectedFund.balance)}</strong>
-              </div>
-            </div>
-
-            <h3 style={{ marginTop: 24 }}>Vouchers</h3>
-            {vouchers.length === 0 ? (
-              <p className="muted">No vouchers.</p>
-            ) : (
-              <Table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Payee</th>
-                    <th>Category</th>
-                    <th>Purpose</th>
-                    <th>Amount</th>
-                    <th>Receipt</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportVoucherPager.pageItems.map((v) => (
-                    <tr key={v.id}>
-                      <td>{formatDate(v.voucher_date)}</td>
-                      <td>{v.payee}</td>
-                      <td>{v.category ?? '—'}</td>
-                      <td>{v.purpose ?? '—'}</td>
-                      <td>{formatPhp(v.amount)}</td>
-                      <td>
-                        {v.receipt_path ? (
-                          <Button variant="ghost" onClick={() => void openReceipt(v.receipt_path!)}>
-                            View
-                          </Button>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td colSpan={4}><strong>Total</strong></td>
-                    <td><strong>{formatPhp(selectedFund.vouchers_total)}</strong></td>
-                    <td />
-                  </tr>
-                </tfoot>
-              </Table>
-            )}
-            <Pagination
-              page={reportVoucherPager.page}
-              pageCount={reportVoucherPager.pageCount}
-              pageSize={reportVoucherPager.pageSize}
-              total={reportVoucherPager.total}
-              start={reportVoucherPager.start}
-              end={reportVoucherPager.end}
-              onPage={reportVoucherPager.setPage}
-              onPageSize={reportVoucherPager.setPageSize}
-              noun="voucher"
-            />
-
-            <h3 style={{ marginTop: 24 }}>Replenishments</h3>
-            {replenishments.length === 0 ? (
-              <p className="muted">No replenishments.</p>
-            ) : (
-              <Table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Reference</th>
-                    <th>Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportReplenishPager.pageItems.map((r) => (
-                    <tr key={r.id}>
-                      <td>{formatDate(r.replenishment_date)}</td>
-                      <td>{r.reference_no ?? '—'}</td>
-                      <td>{formatPhp(r.amount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            )}
-            <Pagination
-              page={reportReplenishPager.page}
-              pageCount={reportReplenishPager.pageCount}
-              pageSize={reportReplenishPager.pageSize}
-              total={reportReplenishPager.total}
-              start={reportReplenishPager.start}
-              end={reportReplenishPager.end}
-              onPage={reportReplenishPager.setPage}
-              onPageSize={reportReplenishPager.setPageSize}
-              noun="replenishment"
-            />
-          </Card>
         </div>
       ) : null}
 
@@ -1131,7 +1166,7 @@ export function PcfPage() {
             </Field>
             <Field label="Category" htmlFor="pcf-v-cat">
               <SelectInput id="pcf-v-cat" value={vCategory} onChange={(e) => setVCategory(e.target.value)}>
-                {PCF_CATEGORIES.map((c) => (
+                {PCF_CLASSIFICATIONS.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
