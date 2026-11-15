@@ -771,7 +771,7 @@ export function ContainersPage() {
                     ))}
                   </SelectInput>
                 </Field>
-                <Field label="SKU" htmlFor="c-sku">
+                <Field label="Rice variety" htmlFor="c-sku">
                   <SelectInput id="c-sku" required value={cSku} onChange={(e) => setCSku(e.target.value)}>
                     {skus.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -970,7 +970,7 @@ export function ContainersPage() {
                 <Table>
                   <thead>
                     <tr>
-                      <th>SKU</th>
+                      <th>Rice variety</th>
                       <th>Branch</th>
                       <th>Expected</th>
                       <th>Actual</th>

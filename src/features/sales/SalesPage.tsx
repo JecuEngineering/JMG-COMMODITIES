@@ -322,7 +322,7 @@ export function SalesPage() {
     const branchName = branches.find((b) => b.id === branchId)?.name ?? 'this branch'
     const match = raw.match(/Insufficient stock for SKU ([0-9a-f-]{36})/i)
     if (match) {
-      const label = selectedSku ? skuLabel(selectedSku) : `SKU ${match[1].slice(0, 8)}`
+      const label = selectedSku ? skuLabel(selectedSku) : `Rice variety ${match[1].slice(0, 8)}`
       const onHand = availableStock != null ? `${availableStock} sack(s)` : 'no stock recorded'
       return `Not enough stock for ${label} at ${branchName} — ${onHand} on hand, ${sacks} requested. Receive stock via Containers or Inventory before selling.`
     }
@@ -864,7 +864,7 @@ export function SalesPage() {
               </div>
             </div>
 
-            {!selectedSku ? <p className="error-banner">No SKU for this variety + sack size.</p> : null}
+            {!selectedSku ? <p className="error-banner">No rice variety for this sack size.</p> : null}
           </form>
       </Modal>
 
@@ -936,14 +936,36 @@ export function SalesPage() {
                 </Field>
               </div>
             </div>
-            <p className="muted" style={{ margin: '4px 0 4px' }}>
-              Gross {formatPhp(historyTotals.gross)} · Collected {formatPhp(historyTotals.paid)} · Balance{' '}
-              {formatPhp(historyTotals.balance)}
-            </p>
-            <p className="muted" style={{ margin: '0 0 10px' }}>
-              Cash {formatPhp(paymentTotals.cash)} · GCash {formatPhp(paymentTotals.gcash)}
-              {paymentTotals.check > 0 ? ` · Check ${formatPhp(paymentTotals.check)}` : ''}
-            </p>
+            <div className="sales-money" aria-label="Money summary">
+              <div className="sales-money-main">
+                <div className="sales-money-card is-gross">
+                  <span>Gross</span>
+                  <strong>{formatPhp(historyTotals.gross)}</strong>
+                </div>
+                <div className="sales-money-card is-collected">
+                  <span>Collected</span>
+                  <strong>{formatPhp(historyTotals.paid)}</strong>
+                </div>
+                <div className={`sales-money-card${historyTotals.balance > 0 ? ' is-due' : ' is-clear'}`}>
+                  <span>Balance</span>
+                  <strong>{formatPhp(historyTotals.balance)}</strong>
+                </div>
+              </div>
+              <div className="sales-money-pay">
+                <div className="sales-money-card is-cash">
+                  <span>Cash</span>
+                  <strong>{formatPhp(paymentTotals.cash)}</strong>
+                </div>
+                <div className="sales-money-card is-gcash">
+                  <span>GCash</span>
+                  <strong>{formatPhp(paymentTotals.gcash)}</strong>
+                </div>
+                <div className="sales-money-card is-check">
+                  <span>Check</span>
+                  <strong>{formatPhp(paymentTotals.check)}</strong>
+                </div>
+              </div>
+            </div>
             {ledgerSales.length === 0 ? (
               <div className="empty-state">No sales for this filter.</div>
             ) : (

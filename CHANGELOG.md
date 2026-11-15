@@ -1,5 +1,15 @@
 # Changelog
 
+## PCF expense sheets (cut + history), colored sales money summary, Liquidations removed, SKU renamed (2026-11-15)
+
+- **Expense sheets (cut/close)**: migration `202611150022_pcf_expense_periods.sql` (applied) adds `pcf_periods` — one **open sheet per fund**, every voucher carries `period_id` (assigned by the `pcf_voucher_assign_period` trigger on insert), `v_pcf_period_totals` for counts/totals, and the `close_pcf_period` RPC. **Ending a sheet** stamps its end date, stores it with all its vouchers in history, and immediately opens a new empty sheet. Backfill gave Cebu an open **NOV 9** sheet (29 vouchers / ₱17,339) and Main an open **NOV 15** (0); verified on production.
+- **Expenses tab**: **Current expense sheet** card — sheet name, date range, entries, sheet total, fund balance, to-replenish/refund, **Add expense** and **End sheet / Cut**; the cut modal takes the sheet name and notes and warns to record the replenishment first. **Sheet history** lists the closed sheets (dates, entries, total, notes) with a **View** modal showing the sheet's vouchers and receipts. The classification/search filters and Excel/CSV/print now cover the current sheet. The old from/to filters are gone.
+- **Report tab**: instead of from/to dates, pick the **expense sheet** (current or any closed sheet); the PETTY CASH MONITORING matrix, totals and export follow the selected sheet, including replenishments inside its date range.
+- **Sales history money summary**: Gross, Collected and Balance (red when there is a balance) plus Cash, GCash and Check now sit in a color-coded container above the ledger instead of two muted text lines.
+- **Liquidations module removed**: the PCF expenses are the liquidation. `src/features/liquidations/` (page + API), its route `/app/liquidations`, nav item and `canViewLiquidations`/`canPrepareLiquidation` are deleted; the DB liquidation tables remain untouched.
+- **SKU wording**: user-facing "SKU" is now **Rice variety** (dropdowns, stock card, containers, prices) or **sack size** where the distinction matters (repacking, product sizes), plus the low-stock notification text. Code/DB identifiers (`skus`, `sku_id`) are unchanged.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass; `v_pcf_period_totals` on production shows Cebu NOV 9 / 29 / 17,339 and Main NOV 15 / 0; the new sales-money and current-sheet/cut blocks were rendered with headless Chrome at 1200 px and checked. The authenticated screens were not clicked through (no staff login available), and the cut RPC was reviewed but not executed on live data.
+
 ## PCF liquidation report in the monitoring-sheet format + November data (2026-11-15)
 
 - **Vouchers = Expenses, merged**: the two duplicate tabs are one **Expenses** ledger in Petty cash (PCV#, date, description, classification, purpose, amount, receipt, replenished status) with date/classification/search filters, totals, Excel/CSV/print and pagination. The old `src/features/expenses/ExpensesPanel.tsx` is removed; `/app/expenses` still redirects to `/app/pcf`.

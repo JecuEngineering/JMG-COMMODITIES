@@ -520,6 +520,98 @@
   color: var(--color-warning);
 }
 
+/* Current expense sheet (period) */
+.pcf-current-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pcf-current-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.pcf-sheet-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--color-jade-soft);
+  color: var(--color-jade-dark);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.pcf-current-range {
+  margin: 6px 0 0;
+  color: var(--color-ink-soft);
+  font-size: 0.85rem;
+}
+
+.pcf-current-total {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.pcf-current-total span {
+  color: var(--color-ink-faint);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.pcf-current-total strong {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.pcf-cut-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.pcf-cut-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-alt, var(--color-surface));
+}
+
+.pcf-cut-summary span {
+  color: var(--color-ink-faint);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.pcf-cut-summary strong {
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.pcf-cut-warning {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 @media print {
   .no-print,
   .shell-sidebar,

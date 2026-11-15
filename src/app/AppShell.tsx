@@ -15,7 +15,6 @@ const NAV_ICONS: Record<string, string> = {
   containers: '🚢',
   pcf: '💰',
   fund_requests: '📋',
-  liquidations: '🧾',
   reports: '📊',
   employees: '👥',
   settings: '⚙️',

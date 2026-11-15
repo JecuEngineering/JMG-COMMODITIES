@@ -20,7 +20,6 @@ export type NavItemId =
   | 'containers'
   | 'pcf'
   | 'fund_requests'
-  | 'liquidations'
   | 'reports'
   | 'employees'
   | 'products'
@@ -89,12 +88,6 @@ export const NAV_ITEMS: NavItem[] = [
     path: '/app/fund-requests',
     roles: ['owner', 'general_accountant', 'branch_accountant', 'warehouse', 'employee'],
     phoneTab: true,
-  },
-  {
-    id: 'liquidations',
-    label: 'Liquidations',
-    path: '/app/liquidations',
-    roles: ['owner', 'general_accountant', 'branch_accountant', 'warehouse', 'employee'],
   },
   {
     id: 'reports',
@@ -290,15 +283,6 @@ export function canViewAllBranchesFundRequests(role: AppRole): boolean {
 
 export function canViewFundRequests(role: AppRole): boolean {
   return roleIn(role, ['owner', 'general_accountant', 'branch_accountant', 'employee', 'warehouse'])
-}
-
-// Liquidations
-export function canViewLiquidations(role: AppRole): boolean {
-  return canViewFundRequests(role)
-}
-
-export function canPrepareLiquidation(role: AppRole): boolean {
-  return roleIn(role, ['employee', 'warehouse', 'branch_accountant', 'owner', 'general_accountant'])
 }
 
 // Customers

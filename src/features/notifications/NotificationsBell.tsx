@@ -86,7 +86,7 @@ export function NotificationsBell() {
         if (low > 0) {
           next.push({
             id: 'low-stock',
-            label: 'SKU/branch combinations at or below reorder level',
+            label: 'Rice variety/branch combinations at or below reorder level',
             count: low,
             to: '/app/inventory',
             tone: low > 5 ? 'danger' : 'warning',

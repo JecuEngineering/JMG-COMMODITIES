@@ -97,7 +97,7 @@ export function ProductsPage() {
 
   function exportSkus() {
     downloadCsv(
-      `sku-list-${todayInputValue()}.csv`,
+      `rice-variety-list-${todayInputValue()}.csv`,
       ['Variety', 'Sack size (kg)', 'Barcode', 'Current price', 'Effective from'],
       skusForSelected.map((sku) => {
         const price = currentPrice(prices, sku.id)
@@ -157,7 +157,7 @@ export function ProductsPage() {
     }
     setSkuBarcode('')
     setSkuOpen(false)
-    setMessage(`SKU ${skuSize}kg created.`)
+    setMessage(`Rice variety ${skuSize}kg created.`)
     await load()
   }
 
@@ -210,7 +210,7 @@ export function ProductsPage() {
       <div className="page-header">
         <div>
           <h1>Products & Prices</h1>
-          <p>Varieties, sack-size SKUs, and dated price list. Changing a price never rewrites old sales.</p>
+          <p>Rice varieties, sack sizes, and dated price list. Changing a price never rewrites old sales.</p>
         </div>
       </div>
 
@@ -308,7 +308,7 @@ export function ProductsPage() {
       </Card>
 
       <Card
-        title="SKUs (sack sizes)"
+        title="Rice varieties (sack sizes)"
         subtitle="5kg · 25kg · 50kg with optional barcode"
         action={
           <div className="row">
@@ -318,7 +318,7 @@ export function ProductsPage() {
               </Button>
             ) : null}
             {canEditProducts && selectedVarietyId ? (
-              <Button onClick={() => setSkuOpen(true)}>Add SKU</Button>
+              <Button onClick={() => setSkuOpen(true)}>Add sack size</Button>
             ) : null}
           </div>
         }
@@ -326,7 +326,7 @@ export function ProductsPage() {
         <Modal
           open={skuOpen}
           onClose={() => setSkuOpen(false)}
-          title="New SKU"
+          title="New sack size"
           subtitle="Sack size for the selected variety."
           size="sm"
           footer={
@@ -335,7 +335,7 @@ export function ProductsPage() {
                 Cancel
               </Button>
               <Button type="submit" form="sku-form">
-                Add SKU
+                Add sack size
               </Button>
             </>
           }
@@ -368,7 +368,7 @@ export function ProductsPage() {
         </Modal>
 
         {skusForSelected.length === 0 ? (
-          <div className="empty-state">No SKUs for this variety yet.</div>
+          <div className="empty-state">No sack sizes for this rice variety yet.</div>
         ) : (
           <Table>
             <thead>
@@ -428,14 +428,14 @@ export function ProductsPage() {
         >
           <form id="price-form" className="stack" onSubmit={setPrice}>
             {error ? <div className="error-banner">{error}</div> : null}
-            <Field label="SKU" htmlFor="price-sku">
+            <Field label="Rice variety" htmlFor="price-sku">
               <SelectInput
                 id="price-sku"
                 required
                 value={priceSkuId}
                 onChange={(e) => setPriceSkuId(e.target.value)}
               >
-                <option value="">Select SKU</option>
+                <option value="">Select rice variety</option>
                 {skus.map((sku) => (
                   <option key={sku.id} value={sku.id}>
                     {sku.variety?.name ?? 'Variety'} · {sku.sack_size}kg
@@ -468,7 +468,7 @@ export function ProductsPage() {
         <Table>
           <thead>
             <tr>
-              <th>SKU</th>
+              <th>Rice variety</th>
               <th>Current price</th>
               <th>Effective from</th>
               <th>History</th>
@@ -506,7 +506,7 @@ export function ProductsPage() {
           end={skuPager.end}
           onPage={skuPager.setPage}
           onPageSize={skuPager.setPageSize}
-          noun="SKU"
+          noun="rice variety"
         />
 
         {historySkuId ? (
@@ -516,7 +516,7 @@ export function ProductsPage() {
               Older rows stay forever so past sales keep the price that was effective on sale date.
             </p>
             {priceHistory.length === 0 ? (
-              <div className="empty-state">No price history for this SKU.</div>
+              <div className="empty-state">No price history for this rice variety.</div>
             ) : (
               <Table>
                 <thead>

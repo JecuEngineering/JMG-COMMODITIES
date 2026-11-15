@@ -9,7 +9,6 @@ import { ProductsPage } from '../features/products/ProductsPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { SalesPage } from '../features/sales/SalesPage'
 import { CustomersPage } from '../features/customers/CustomersPage'
-import { LiquidationsPage } from '../features/liquidations/LiquidationsPage'
 import { ReportsPage } from '../features/reports/ReportsPage'
 import { PcfPage } from '../features/pcf/PcfPage'
 import { FundRequestsPage } from '../features/fund-requests/FundRequestsPage'
@@ -41,7 +40,6 @@ export const router = createBrowserRouter([
           { path: 'expenses', element: <Navigate to="/app/pcf" replace /> },
           { path: 'pcf', element: <PcfPage /> },
           { path: 'fund-requests', element: <FundRequestsPage /> },
-          { path: 'liquidations', element: <LiquidationsPage /> },
           { path: 'reports', element: <ReportsPage /> },
           { path: 'inquiries', element: <InquiriesPage /> },
           { path: 'audit', element: <AuditLogPage /> },

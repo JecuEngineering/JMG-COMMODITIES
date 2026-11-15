@@ -162,3 +162,125 @@
   border-top: 2px solid var(--color-border-strong);
   background: var(--color-surface-raised);
 }
+
+/* ── Sales history money summary ──────────────────────────── */
+.sales-money {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 6px 0 14px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-raised);
+}
+
+.sales-money-main,
+.sales-money-pay {
+  display: grid;
+  gap: 10px;
+}
+
+.sales-money-main {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sales-money-pay {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sales-money-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.sales-money-card span {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+
+.sales-money-card strong {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+.sales-money-main .sales-money-card strong {
+  font-size: 1.4rem;
+}
+
+.sales-money-card.is-gross {
+  background: var(--color-neutral-soft);
+  border-color: var(--color-border-strong);
+}
+
+.sales-money-card.is-collected {
+  background: var(--color-ok-soft);
+  border-color: var(--color-ok-border);
+}
+
+.sales-money-card.is-collected strong {
+  color: var(--color-ok);
+}
+
+.sales-money-card.is-due {
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger-border);
+}
+
+.sales-money-card.is-due strong {
+  color: var(--color-danger);
+}
+
+.sales-money-card.is-clear {
+  background: var(--color-ok-soft);
+  border-color: var(--color-ok-border);
+}
+
+.sales-money-card.is-clear strong {
+  color: var(--color-ok);
+}
+
+.sales-money-card.is-cash {
+  background: var(--color-gold-soft);
+  border-color: var(--color-warning-border);
+}
+
+.sales-money-card.is-cash strong {
+  color: var(--color-warning);
+}
+
+.sales-money-card.is-gcash {
+  background: var(--color-info-soft);
+  border-color: #c7d7fe;
+}
+
+.sales-money-card.is-gcash strong {
+  color: var(--color-info);
+}
+
+.sales-money-card.is-check {
+  background: var(--color-jade-soft);
+  border-color: var(--color-jade-muted);
+}
+
+.sales-money-card.is-check strong {
+  color: var(--color-jade-dark);
+}
+
+@media (max-width: 640px) {
+  .sales-money-main,
+  .sales-money-pay {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+

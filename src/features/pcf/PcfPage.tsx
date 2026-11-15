@@ -20,16 +20,19 @@ import { fetchBranches } from '../inventory/inventoryApi'
 import {
   PCF_CLASSIFICATIONS,
   PCF_VOUCHER_LIMIT,
+  closePeriod,
   createFund,
   createReplenishment,
   createVoucher,
   fetchFundBalances,
+  fetchPeriods,
   fetchReplenishments,
   fetchUnrecoveredVouchers,
   fetchVouchers,
   pcfClassification,
   pcfReceiptUrl,
   type PcfFundBalance,
+  type PcfPeriod,
   type PcfReplenishment,
   type PcfVoucher,
 } from './pcfApi'
@@ -44,13 +47,18 @@ const TABS: { id: TabId; label: string; needs?: 'replenish' }[] = [
   { id: 'report', label: 'Report' },
 ]
 
-function pad(n: number) {
-  return String(n).padStart(2, '0')
+/** Same style as the workbook tab names: NOV 9, NOV 15. */
+function sheetLabel(date = todayInputValue()) {
+  const d = new Date(`${date}T00:00:00`)
+  return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }).toUpperCase()
 }
 
-function monthStart() {
-  const d = new Date()
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`
+function byVoucherOrder(a: PcfVoucher, b: PcfVoucher) {
+  return (
+    a.voucher_date.localeCompare(b.voucher_date) ||
+    (a.voucher_no ?? '').localeCompare(b.voucher_no ?? '') ||
+    a.created_at.localeCompare(b.created_at)
+  )
 }
 
 function longDate(date: string) {
@@ -99,8 +107,6 @@ export function PcfPage() {
   const [vAmount, setVAmount] = useState('')
   const [vFile, setVFile] = useState<File | null>(null)
   const [voucherSearch, setVoucherSearch] = useState('')
-  const [voucherFrom, setVoucherFrom] = useState(monthStart)
-  const [voucherTo, setVoucherTo] = useState(todayInputValue)
   const [voucherCategory, setVoucherCategory] = useState('')
 
   // Replenishment form
@@ -115,9 +121,16 @@ export function PcfPage() {
   const [newFundNotes, setNewFundNotes] = useState('')
   const [fundSaving, setFundSaving] = useState(false)
 
-  // Monitoring period controls (null = derived default)
-  const [recordFrom, setRecordFrom] = useState<string | null>(null)
-  const [recordTo, setRecordTo] = useState<string | null>(null)
+  // Expense sheets
+  const [periods, setPeriods] = useState<PcfPeriod[]>([])
+  const [reportPeriodId, setReportPeriodId] = useState('')
+  const [cutOpen, setCutOpen] = useState(false)
+  const [cutLabel, setCutLabel] = useState('')
+  const [cutNotes, setCutNotes] = useState('')
+  const [cutSaving, setCutSaving] = useState(false)
+  const [historyPeriod, setHistoryPeriod] = useState<PcfPeriod | null>(null)
+
+  // Monitoring sheet controls
   const [approvedBy, setApprovedBy] = useState('')
 
   const [error, setError] = useState<string | null>(null)
@@ -152,18 +165,23 @@ export function PcfPage() {
     if (!fundId) {
       setVouchers([])
       setReplenishments([])
+      setPeriods([])
       setUnrecovered([])
       return
     }
     try {
-      const [v, r, u] = await Promise.all([
+      const [v, r, u, p] = await Promise.all([
         fetchVouchers(fundId),
         fetchReplenishments(fundId),
         fetchUnrecoveredVouchers(fundId),
+        fetchPeriods(fundId),
       ])
       setVouchers(v)
       setReplenishments(r)
       setUnrecovered(u)
+      setPeriods(p)
+      setReportPeriodId('')
+      setHistoryPeriod(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -188,26 +206,39 @@ export function PcfPage() {
     return scoped.filter((b) => !funds.some((f) => f.branch_id === b.id))
   }, [branches, funds, canViewAll, profileBranchId])
 
-  const recordFromValue = recordFrom ?? monthStart()
-  const recordToValue = recordTo ?? todayInputValue()
+  const openPeriod = useMemo(() => periods.find((p) => p.status === 'open') ?? null, [periods])
+  const closedPeriods = useMemo(() => periods.filter((p) => p.status === 'closed'), [periods])
 
-  const periodVouchers = useMemo(
-    () =>
-      vouchers
-        .filter((v) => v.voucher_date >= recordFromValue && v.voucher_date <= recordToValue)
-        .slice()
-        .sort(
-          (a, b) =>
-            a.voucher_date.localeCompare(b.voucher_date) ||
-            (a.voucher_no ?? '').localeCompare(b.voucher_no ?? '') ||
-            a.created_at.localeCompare(b.created_at),
-        ),
-    [vouchers, recordFromValue, recordToValue],
+  /** Vouchers of the open sheet; before a fund has periods, all vouchers count as current. */
+  const currentPeriodVouchers = useMemo(() => {
+    const list = openPeriod
+      ? vouchers.filter((v) => v.period_id === openPeriod.id)
+      : periods.length === 0
+        ? vouchers
+        : vouchers.filter((v) => !v.period_id)
+    return list.slice().sort(byVoucherOrder)
+  }, [vouchers, openPeriod, periods.length])
+
+  const currentPeriodTotal = useMemo(
+    () => currentPeriodVouchers.reduce((sum, v) => sum + Number(v.amount), 0),
+    [currentPeriodVouchers],
   )
+
+  const reportPeriod = useMemo(
+    () => periods.find((p) => p.id === reportPeriodId) ?? openPeriod ?? null,
+    [periods, reportPeriodId, openPeriod],
+  )
+
+  const reportVouchers = useMemo(() => {
+    if (reportPeriod) {
+      return vouchers.filter((v) => v.period_id === reportPeriod.id).slice().sort(byVoucherOrder)
+    }
+    return periods.length === 0 ? vouchers.slice().sort(byVoucherOrder) : []
+  }, [vouchers, reportPeriod, periods.length])
 
   const liquidationRows = useMemo(() => {
     let lastDate = ''
-    return periodVouchers.map((voucher) => {
+    return reportVouchers.map((voucher) => {
       const showDate = voucher.voucher_date !== lastDate
       lastDate = voucher.voucher_date
       return {
@@ -217,7 +248,7 @@ export function PcfPage() {
         showDate,
       }
     })
-  }, [periodVouchers])
+  }, [reportVouchers])
 
   const classTotals = useMemo(() => {
     const totals = new Map<string, number>(PCF_CLASSIFICATIONS.map((c) => [c, 0]))
@@ -229,12 +260,27 @@ export function PcfPage() {
 
   const periodTotals = useMemo(() => {
     const expense = liquidationRows.reduce((sum, row) => sum + row.amount, 0)
-    const replenishment = replenishments
-      .filter((r) => r.replenishment_date >= recordFromValue && r.replenishment_date <= recordToValue)
-      .reduce((sum, r) => sum + Number(r.amount), 0)
+    const replenishment = reportPeriod
+      ? replenishments
+          .filter((r) =>
+            reportPeriod.replenishment_id
+              ? r.id === reportPeriod.replenishment_id
+              : r.replenishment_date >= reportPeriod.start_date &&
+                r.replenishment_date <= (reportPeriod.end_date ?? todayInputValue()),
+          )
+          .reduce((sum, r) => sum + Number(r.amount), 0)
+      : 0
     const opening = Number(selectedFund?.fund_amount ?? 0)
     return { expense, replenishment, opening, closing: opening + replenishment - expense }
-  }, [liquidationRows, replenishments, recordFromValue, recordToValue, selectedFund])
+  }, [liquidationRows, replenishments, reportPeriod, selectedFund])
+
+  const historyVouchers = useMemo(() => {
+    if (!historyPeriod) return []
+    return vouchers
+      .filter((v) => v.period_id === historyPeriod.id)
+      .slice()
+      .sort(byVoucherOrder)
+  }, [vouchers, historyPeriod])
 
   const voucherNumbers = useMemo(() => {
     const sorted = vouchers
@@ -266,9 +312,7 @@ export function PcfPage() {
 
   const filteredVouchers = useMemo(
     () =>
-      vouchers.filter((v) => {
-        if (voucherFrom && v.voucher_date < voucherFrom) return false
-        if (voucherTo && v.voucher_date > voucherTo) return false
+      currentPeriodVouchers.filter((v) => {
         if (voucherCategory && pcfClassification(v.category) !== voucherCategory) return false
         if (!searchTerm) return true
         return (
@@ -277,7 +321,7 @@ export function PcfPage() {
           (v.voucher_no ?? '').toLowerCase().includes(searchTerm)
         )
       }),
-    [vouchers, voucherFrom, voucherTo, voucherCategory, searchTerm],
+    [currentPeriodVouchers, voucherCategory, searchTerm],
   )
 
   const filteredVoucherTotal = useMemo(
@@ -436,6 +480,42 @@ export function PcfPage() {
     setReplenishOpen(true)
   }
 
+  function openCut() {
+    if (!openPeriod) return
+    setCutLabel(sheetLabel(openPeriod.end_date ?? todayInputValue()))
+    setCutNotes('')
+    setError(null)
+    setCutOpen(true)
+  }
+
+  async function onCutSubmit(event: FormEvent) {
+    event.preventDefault()
+    if (!canManage || !openPeriod) return
+    if (currentPeriodVouchers.length === 0) {
+      setError('Add at least one expense before ending this sheet.')
+      return
+    }
+    setCutSaving(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await closePeriod(
+        openPeriod.id,
+        cutLabel.trim() || sheetLabel(openPeriod.end_date ?? todayInputValue()),
+        cutNotes.trim(),
+      )
+      setCutOpen(false)
+      setReportPeriodId('')
+      setHistoryPeriod(null)
+      setMessage('Sheet ended. The next expenses start a new sheet.')
+      await loadFundDetail(selectedFundId)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCutSaving(false)
+    }
+  }
+
   function onPrintReport() {
     setTab('report')
     window.setTimeout(() => printPage(), 120)
@@ -461,8 +541,8 @@ export function PcfPage() {
 
   function exportLiquidationExcel() {
     downloadExcel(
-      `pcf-liquidation-${branchLabel.replace(/\s+/g, '-')}-${recordFromValue}-to-${recordToValue}.xls`,
-      'PCF Liquidation',
+      `pcf-liquidation-${branchLabel.replace(/\s+/g, '-')}-${reportPeriod?.label.replace(/\s+/g, '-') ?? todayInputValue()}.xls`,
+      `PCF ${reportPeriod?.label ?? 'Liquidation'}`,
       ['DATE', 'PCV#', 'DESCRIPTION', ...PCF_CLASSIFICATIONS, 'AMOUNT'],
       [
         ...liquidationRows.map((row) => [
@@ -488,7 +568,7 @@ export function PcfPage() {
 
   function exportExpensesExcel() {
     downloadExcel(
-      `pcf-expenses-${branchLabel.replace(/\s+/g, '-')}-${voucherFrom || 'start'}-to-${voucherTo || 'today'}.xls`,
+      `pcf-expenses-${branchLabel.replace(/\s+/g, '-')}-${openPeriod?.label.replace(/\s+/g, '-') ?? todayInputValue()}.xls`,
       'PCF Expenses',
       ['DATE', 'PCV#', 'DESCRIPTION', 'PURPOSE', 'CLASSIFICATION', 'AMOUNT'],
       [
@@ -507,7 +587,7 @@ export function PcfPage() {
 
   function exportExpensesCsv() {
     downloadCsv(
-      `pcf-expenses-${branchLabel.replace(/\s+/g, '-')}-${voucherFrom || 'start'}-to-${voucherTo || 'today'}.csv`,
+      `pcf-expenses-${branchLabel.replace(/\s+/g, '-')}-${openPeriod?.label.replace(/\s+/g, '-') ?? todayInputValue()}.csv`,
       ['DATE', 'PCV#', 'DESCRIPTION', 'PURPOSE', 'CLASSIFICATION', 'AMOUNT'],
       [
         ...filteredVouchers.map((v) => [
@@ -813,14 +893,70 @@ export function PcfPage() {
 
       {tab === 'vouchers' ? (
         <div className="stack">
-          <Card title="Filters" className="no-print">
+          <Card
+            title="Current expense sheet"
+            subtitle={
+              openPeriod
+                ? 'Expenses accumulate here until you end the sheet.'
+                : 'Expenses logged before the first cut.'
+            }
+            action={
+              canManage && selectedFund ? (
+                <div className="row">
+                  <Button
+                    variant="secondary"
+                    onClick={openCut}
+                    disabled={!openPeriod || currentPeriodVouchers.length === 0}
+                  >
+                    End sheet / Cut
+                  </Button>
+                  <Button onClick={() => setVoucherOpen(true)}>Add expense</Button>
+                </div>
+              ) : null
+            }
+          >
+            <div className="pcf-current-sheet">
+              <div className="pcf-current-head">
+                <div>
+                  <span className="pcf-sheet-badge">{openPeriod?.label ?? 'NEW SHEET'}</span>
+                  <p className="pcf-current-range">
+                    {openPeriod
+                      ? `${longDate(openPeriod.start_date)} - ${longDate(openPeriod.end_date ?? todayInputValue())}`
+                      : 'No open sheet yet'}
+                  </p>
+                </div>
+                <div className="pcf-current-total">
+                  <span>Sheet expenses</span>
+                  <strong>{formatPhp(currentPeriodTotal)}</strong>
+                </div>
+              </div>
+              <div className="pcf-cut-summary">
+                <div>
+                  <span>Entries</span>
+                  <strong>{currentPeriodVouchers.length}</strong>
+                </div>
+                <div>
+                  <span>Fund balance</span>
+                  <strong>{formatPhp(selectedFund?.balance ?? 0)}</strong>
+                </div>
+                <div>
+                  <span>To replenish / refund</span>
+                  <strong>{formatPhp(unrecoveredTotal)}</strong>
+                </div>
+              </div>
+              <p className="faint">
+                Record the replenishment first, then end this sheet. Ending it stores the expenses in
+                sheet history and starts a new empty sheet for the next expenses.
+              </p>
+            </div>
+          </Card>
+
+          <Card
+            title="Expense list"
+            className="no-print"
+            subtitle={`${filteredVouchers.length} entr${filteredVouchers.length === 1 ? 'y' : 'ies'} · Total ${formatPhp(filteredVoucherTotal)}`}
+          >
             <div className="row" style={{ flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
-              <Field label="From" htmlFor="pcf-ex-from">
-                <DateInput id="pcf-ex-from" value={voucherFrom} onChange={setVoucherFrom} placeholder="Any date" />
-              </Field>
-              <Field label="To" htmlFor="pcf-ex-to">
-                <DateInput id="pcf-ex-to" value={voucherTo} onChange={setVoucherTo} placeholder="Any date" />
-              </Field>
               <Field label="Classification" htmlFor="pcf-ex-cat">
                 <SelectInput
                   id="pcf-ex-cat"
@@ -845,7 +981,7 @@ export function PcfPage() {
                 />
               </Field>
             </div>
-            <div className="row" style={{ gap: 8, marginTop: 12 }}>
+            <div className="row" style={{ gap: 8, margin: '12px 0' }}>
               <Button variant="secondary" onClick={exportExpensesExcel}>
                 Export Excel
               </Button>
@@ -856,17 +992,11 @@ export function PcfPage() {
                 Print / PDF
               </Button>
             </div>
-          </Card>
 
-          <Card
-            title="Expense list"
-            subtitle={`${filteredVouchers.length} entr${filteredVouchers.length === 1 ? 'y' : 'ies'} · Total ${formatPhp(filteredVoucherTotal)}`}
-            action={
-              canManage && selectedFund ? <Button onClick={() => setVoucherOpen(true)}>Add expense</Button> : null
-            }
-          >
-            {filteredVouchers.length === 0 ? (
-              <div className="empty-state">No expenses in this range.</div>
+            {currentPeriodVouchers.length === 0 ? (
+              <div className="empty-state">No expenses in this sheet yet.</div>
+            ) : filteredVouchers.length === 0 ? (
+              <div className="empty-state">No expenses match this filter.</div>
             ) : (
               <Table>
                 <thead>
@@ -932,6 +1062,47 @@ export function PcfPage() {
               noun="expense"
             />
           </Card>
+
+          <Card
+            title={`Sheet history (${closedPeriods.length})`}
+            subtitle="Every cut keeps its vouchers, receipts and total, like the separate workbook sheets."
+          >
+            {closedPeriods.length === 0 ? (
+              <div className="empty-state">No sheets ended yet.</div>
+            ) : (
+              <Table>
+                <thead>
+                  <tr>
+                    <th>Sheet</th>
+                    <th>Dates</th>
+                    <th className="num">Entries</th>
+                    <th className="num">Total</th>
+                    <th>Notes</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {closedPeriods.map((p) => (
+                    <tr key={p.id}>
+                      <td className="pcf-cell-primary">{p.label}</td>
+                      <td>
+                        {formatDate(p.start_date)} –{' '}
+                        {formatDate(p.end_date ?? p.start_date)}
+                      </td>
+                      <td className="num">{p.voucher_count}</td>
+                      <td className="pcf-cell-amount">{formatPhp(p.total)}</td>
+                      <td>{p.notes ?? '—'}</td>
+                      <td>
+                        <Button variant="ghost" onClick={() => setHistoryPeriod(p)}>
+                          View
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </Card>
         </div>
       ) : null}
 
@@ -982,21 +1153,21 @@ export function PcfPage() {
 
       {tab === 'report' && selectedFund ? (
         <div className="stack">
-          <Card title="Monitoring period" className="no-print">
+          <Card title="Monitoring sheet" className="no-print">
             <div className="row" style={{ flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' }}>
-              <Field label="From" htmlFor="rec-from">
-                <DateInput
-                  id="rec-from"
-                  value={recordFromValue}
-                  onChange={setRecordFrom}
-                />
-              </Field>
-              <Field label="To" htmlFor="rec-to">
-                <DateInput
-                  id="rec-to"
-                  value={recordToValue}
-                  onChange={setRecordTo}
-                />
+              <Field label="Expense sheet" htmlFor="rec-sheet">
+                <SelectInput
+                  id="rec-sheet"
+                  value={reportPeriod?.id ?? ''}
+                  onChange={(e) => setReportPeriodId(e.target.value)}
+                >
+                  {periods.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label} · {p.status === 'open' ? 'current' : 'closed'} · {formatPhp(p.total)}
+                    </option>
+                  ))}
+                  {periods.length === 0 ? <option value="">All expenses</option> : null}
+                </SelectInput>
               </Field>
               <Field label="Approved by" htmlFor="rec-approved">
                 <TextInput
@@ -1034,7 +1205,9 @@ export function PcfPage() {
 
             <h2 className="pcf-sheet-title">PETTY CASH MONITORING</h2>
             <p className="pcf-sheet-sub">
-              {branchLabel} · {longDate(recordFromValue)} - {longDate(recordToValue)}
+              {branchLabel} · {reportPeriod?.label ?? 'ALL EXPENSES'} ·{' '}
+              {longDate(reportPeriod?.start_date ?? '')} -{' '}
+              {longDate(reportPeriod?.end_date ?? todayInputValue())}
             </p>
 
             <div className="pcf-sheet-meta">
@@ -1212,6 +1385,128 @@ export function PcfPage() {
               />
             </Field>
           </form>
+        </Modal>
+      ) : null}
+
+      {canManage && selectedFund && openPeriod ? (
+        <Modal
+          open={cutOpen}
+          onClose={() => setCutOpen(false)}
+          title="End current expense sheet"
+          subtitle={`${openPeriod.label} · ${currentPeriodVouchers.length} entr${currentPeriodVouchers.length === 1 ? 'y' : 'ies'} · ${formatPhp(currentPeriodTotal)}`}
+          size="sm"
+          busy={cutSaving}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setCutOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="pcf-cut-form" loading={cutSaving}>
+                End sheet
+              </Button>
+            </>
+          }
+        >
+          <form id="pcf-cut-form" className="stack" onSubmit={onCutSubmit}>
+            <div className="pcf-cut-summary">
+              <div>
+                <span>Entries</span>
+                <strong>{currentPeriodVouchers.length}</strong>
+              </div>
+              <div>
+                <span>Sheet total</span>
+                <strong>{formatPhp(currentPeriodTotal)}</strong>
+              </div>
+              <div>
+                <span>To replenish</span>
+                <strong>{formatPhp(unrecoveredTotal)}</strong>
+              </div>
+            </div>
+            <Field label="Sheet name" htmlFor="pcf-cut-label">
+              <TextInput
+                id="pcf-cut-label"
+                required
+                value={cutLabel}
+                onChange={(e) => setCutLabel(e.target.value)}
+                placeholder="NOV 15"
+              />
+            </Field>
+            <Field label="Notes" htmlFor="pcf-cut-notes" hint="Replenishment reference, refund, etc.">
+              <TextArea
+                id="pcf-cut-notes"
+                value={cutNotes}
+                onChange={(e) => setCutNotes(e.target.value)}
+              />
+            </Field>
+            <p className="pcf-cut-warning">
+              Record the replenishment or refund on the Replenishments tab first. Ending the sheet keeps
+              all of its expenses in history and opens a new empty sheet for the next expenses.
+            </p>
+          </form>
+        </Modal>
+      ) : null}
+
+      {historyPeriod ? (
+        <Modal
+          open
+          onClose={() => setHistoryPeriod(null)}
+          title={`Sheet ${historyPeriod.label}`}
+          subtitle={`${formatDate(historyPeriod.start_date)} – ${formatDate(historyPeriod.end_date ?? historyPeriod.start_date)} · ${historyPeriod.voucher_count} entr${historyPeriod.voucher_count === 1 ? 'y' : 'ies'} · ${formatPhp(historyPeriod.total)}`}
+          size="lg"
+          footer={
+            <Button variant="secondary" onClick={() => setHistoryPeriod(null)}>
+              Close
+            </Button>
+          }
+        >
+          {historyPeriod.notes ? <p className="faint">{historyPeriod.notes}</p> : null}
+          {historyVouchers.length === 0 ? (
+            <div className="empty-state">This sheet has no expenses.</div>
+          ) : (
+            <Table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>PCV#</th>
+                  <th>Description</th>
+                  <th>Classification</th>
+                  <th>Amount</th>
+                  <th>Receipt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historyVouchers.map((v) => (
+                  <tr key={v.id}>
+                    <td>{formatDate(v.voucher_date)}</td>
+                    <td className="pcf-cell-ref">{voucherRef(v)}</td>
+                    <td className="pcf-cell-primary">{v.payee}</td>
+                    <td>{pcfClassification(v.category)}</td>
+                    <td className="pcf-cell-amount">{formatPhp(v.amount)}</td>
+                    <td>
+                      {v.receipt_path ? (
+                        <Button variant="ghost" onClick={() => void openReceipt(v.receipt_path!)}>
+                          View
+                        </Button>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={4}>
+                    <strong>Total</strong>
+                  </td>
+                  <td className="pcf-cell-amount">
+                    <strong>{formatPhp(historyPeriod.total)}</strong>
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </Table>
+          )}
         </Modal>
       ) : null}
 

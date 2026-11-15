@@ -66,6 +66,7 @@ export interface PcfFundBalance extends PcfFund {
 export interface PcfVoucher {
   id: string
   fund_id: string
+  period_id: string | null
   voucher_no: string | null
   voucher_date: string
   payee: string
@@ -92,6 +93,25 @@ export interface PcfReplenishment {
   notes: string | null
   created_at: string
   releaser?: Pick<Profile, 'id' | 'full_name'> | null
+}
+
+/** One expenses "sheet" of a fund; open while expenses are being logged. */
+export interface PcfPeriod {
+  id: string
+  fund_id: string
+  branch_name: string
+  label: string
+  start_date: string
+  end_date: string | null
+  status: 'open' | 'closed'
+  replenishment_id: string | null
+  notes: string | null
+  closed_by: string | null
+  closed_at: string | null
+  created_at: string
+  updated_at: string
+  voucher_count: number
+  total: number
 }
 
 export async function fetchFundBalances(): Promise<PcfFundBalance[]> {
@@ -157,18 +177,6 @@ export async function fetchVouchers(fundId?: string): Promise<PcfVoucher[]> {
   return (data as PcfVoucher[]) ?? []
 }
 
-/** Every voucher receipt for a branch, newest first (used by Liquidations). */
-export async function fetchBranchVouchers(branchId: string): Promise<PcfVoucher[]> {
-  const { data, error } = await supabase
-    .from('pcf_vouchers')
-    .select('*, fund:pcf_funds!inner(branch_id)')
-    .eq('fund.branch_id', branchId)
-    .is('deleted_at', null)
-    .order('voucher_date', { ascending: false })
-  if (error) throw error
-  return (data as PcfVoucher[]) ?? []
-}
-
 /** Short-lived signed URL for a receipt stored in the private pcf-receipts bucket. */
 export async function pcfReceiptUrl(path: string): Promise<string | null> {
   const { data, error } = await supabase.storage.from('pcf-receipts').createSignedUrl(path, 3600)
@@ -202,6 +210,31 @@ export async function createVoucher(input: {
     .single()
   if (error) throw error
   return data as PcfVoucher
+}
+
+export async function fetchPeriods(fundId?: string): Promise<PcfPeriod[]> {
+  let q = supabase
+    .from('v_pcf_period_totals')
+    .select('*')
+    .order('start_date', { ascending: false })
+  if (fundId) q = q.eq('fund_id', fundId)
+  const { data, error } = await q
+  if (error) throw error
+  return ((data as PcfPeriod[]) ?? []).map((row) => ({
+    ...row,
+    voucher_count: Number(row.voucher_count),
+    total: Number(row.total),
+  }))
+}
+
+/** Cut the open sheet and start a new one. */
+export async function closePeriod(periodId: string, label?: string, notes?: string): Promise<void> {
+  const { error } = await supabase.rpc('close_pcf_period', {
+    p_period_id: periodId,
+    p_label: label || null,
+    p_notes: notes || null,
+  })
+  if (error) throw error
 }
 
 export async function fetchReplenishments(fundId?: string): Promise<PcfReplenishment[]> {

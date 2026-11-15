@@ -1,6 +1,28 @@
 # JMG System – Agent Handoff
 
-**Last updated:** 2026-11-15 (Petty cash restructure — Cebu fund ₱50,000, ₱5,000 voucher cap, Vouchers+Expenses merged into one Expenses ledger, liquidation report in the PETTYCASH MONITORING matrix, PCV numbering, November 9–14 Cebu sheet imported (29 vouchers / ₱17,339); `create_sale` accepts `p_payments` and `p_dr_number`; Sales CEBU Sales-In ledger imported — 561 sales / 832 lines / ₱56,459,750; Sales history mirrors the sheet and now omits Date deposit/Bank; desktop layout from 720 px with an icon rail on laptop/Mac windows; per-tab sessions ending on tab close + 5-minute idle sign-out; official company details on the public site; link-preview/favicon fix; tab-focus reload fix; accounts editing, branch map pins, container numbers, liquidations module, customers module, installment schedule, CSV exports)
+**Last updated:** 2026-11-15 (PCF expense sheets with cut/history mirroring the workbook tabs, sales history color-coded money summary, Liquidations module removed, SKU renamed to Rice variety; before that: Petty cash restructure — Cebu fund ₱50,000, ₱5,000 voucher cap, Vouchers+Expenses merged into one Expenses ledger, liquidation report in the PETTYCASH MONITORING matrix, PCV numbering, November 9–14 Cebu sheet imported (29 vouchers / ₱17,339); `create_sale` accepts `p_payments` and `p_dr_number`; Sales CEBU Sales-In ledger imported — 561 sales / 832 lines / ₱56,459,750; Sales history mirrors the sheet; desktop layout from 720 px with an icon rail on laptop/Mac windows; per-tab sessions ending on tab close + 5-minute idle sign-out; official company details on the public site; link-preview/favicon fix; tab-focus reload fix; accounts editing, branch map pins, container numbers, customers module, installment schedule, CSV exports)
+
+## PCF expense sheets — cut, history, report by sheet (2026-11-15)
+
+- **Data**: migration `202611150022_pcf_expense_periods.sql` (**applied**) adds `pcf_periods` (`id, fund_id, label, start_date, end_date, status open|closed, replenishment_id, notes, closed_by, closed_at`), the partial unique index `pcf_periods_one_open_idx` (one open sheet per fund), `pcf_vouchers.period_id`, RLS mirroring pcf_vouchers, view `v_pcf_period_totals` (voucher_count/total) and the RPC `close_pcf_period(p_period_id, p_label, p_notes)`.
+- **Auto-assignment**: the `pcf_voucher_assign_period` trigger puts every new voucher into the fund's open sheet, creating one labelled `NOV 9`-style from the voucher date when none exists. `createVoucher` needs no change.
+- **Cut flow**: `closePeriod()` calls the RPC; it locks the sheet, sets `end_date = max(voucher_date)`, label/notes/closed_by/closed_at, then opens the next sheet starting `greatest(last+1, current_date)`. UI: Expenses → **Current expense sheet** card with **End sheet / Cut** (modal: name, notes, entry/total/to-replenish summary, warning to record the replenishment first) and **Add expense**.
+- **History**: closed sheets list in **Sheet history** with dates, entries, total and notes; **View** opens a modal with that sheet's vouchers and receipt links. Nothing is ever merged into the current sheet.
+- **Report**: the from/to inputs were replaced by an **expense sheet** selector (`periods` from `v_pcf_period_totals`); matrix rows/totals, Excel export and the print sheet follow the selection. Replenishments are matched by `replenishment_id` when set, else by the sheet's date range.
+- **Frontend**: `src/features/pcf/pcfApi.ts` (`PcfPeriod`, `fetchPeriods`, `closePeriod`; `fetchBranchVouchers` removed with Liquidations); `src/features/pcf/PcfPage.tsx` (period state, `openPeriod`/`currentPeriodVouchers`/`reportPeriod`/`closedPeriods`/`historyVouchers`, cut/history modals); `src/features/pcf/pcf.css` (`.pcf-current-sheet`, `.pcf-sheet-badge`, `.pcf-cut-summary`, `.pcf-cut-warning`).
+- **Backfill**: Cebu open sheet **NOV 9** — 29 vouchers / ₱17,339; Main open **NOV 15** — 0. Verified via `v_pcf_period_totals` on production.
+
+## Sales history money summary (2026-11-15)
+
+- The two muted summary lines under the filters are replaced by a `.sales-money` container: Gross / Collected / Balance on top (Balance red when > 0, green when settled) and Cash / GCash / Check below, each in its own tinted card. CSS lives in `src/features/sales/sales.css`; values still come from `historyTotals` and `paymentTotals` (filtered set, not just the page).
+
+## Liquidations module removed (2026-11-15)
+
+- PCF expenses **are** the liquidation, so the separate module is gone: `src/features/liquidations/` deleted, route `/app/liquidations` removed from `router.tsx`, nav item and `canViewLiquidations`/`canPrepareLiquidation` removed from `src/lib/roles.ts`, icon removed from `AppShell.tsx`. The liquidation DB tables/RLS from migration 015 were left in place (no data loss) and Fund Requests' receipt tables are unaffected.
+
+## SKU wording (2026-11-15)
+
+- User-facing **SKU** is now **Rice variety**, or **sack size** where the distinction matters (Products sizes, inventory repacking, low-stock notification). Touched `ProductsPage`, `ContainersPage`, `InventoryPage`, `SalesPage`, `NotificationsBell`. DB/table/column names and TS identifiers still use `sku`.
 
 ## Petty cash restructure + liquidation report (2026-11-15)
 
@@ -10,7 +32,7 @@
 - **PCV numbers**: `pcf_vouchers.voucher_no` (migration 021) is assigned by the `pcf_voucher_assign_no` trigger as `PCV-0001`, `PCV-0002`, … per fund, unique on `(fund_id, voucher_no)`. Lists, the report and exports use the stored number (derived numbering remains only as a fallback).
 - **Imported November data**: migration `202611150021_pcf_liquidation_cebu_november.sql` (applied) imported the **NOVEMBER 9-** sheet — 29 vouchers dated 11/9–11/14, PCV-0001…PCV-0029, **₱17,339** — into the Cebu fund, mapped to the sheet's classifications. Cebu balance is now **₱32,661**.
 - **RFH moved to Fund Requests** (`src/features/fund-requests/RequestFundPanel.tsx`, tab **Petty cash RFH**, visible to BA/Owner/GA): the paper Request for Fund form, category rows from the selected fund's vouchers in the period, typed additional lines, receipt review, Excel and print. **Create fund request** saves a draft `cash_advance` (`purpose` = the sheet's purpose, `notes` carries the RFH # and period) for the user's branch; it then follows the normal review → approve → release flow. `can_create_fund_request` now includes `branch_accountant` (DB function in migration 020 + `src/lib/roles.ts`).
-- **Receipts**: `pcfReceiptUrl` creates a 1-hour signed URL. Expenses/Report/recent vouchers show a **View** link. Liquidations (`src/features/liquidations/LiquidationsPage.tsx`) lists the branch's PCF vouchers (BA/Owner/GA) with receipts and **Add as line**, which writes `liquidation_items.pcf_voucher_id` (unique index, migration 020). Expense lines show the receipt, so expenses + returned amount balance against the released advance.
+- **Receipts**: `pcfReceiptUrl` creates a 1-hour signed URL. Expenses/Report/recent vouchers show a **View** link. (The Liquidations screen described here was **removed on 2026-11-15** — PCF expenses are the liquidation; `liquidation_items` rows from migration 020 remain in the DB but nothing in the UI writes them now.)
 - **Verification**: `npx tsc -b --force` and `npx vite build` pass; production shows Cebu **29 vouchers / ₱17,339** (`PCV-0001`–`PCV-0029`, trigger test produced `PCV-0030` in a rolled-back transaction). The report was rendered offline with the imported rows at 1500 px and printed to a 1-page A4 landscape PDF. No staff login was available in the in-app browser, so the authenticated screen itself was not clicked through.
 
 

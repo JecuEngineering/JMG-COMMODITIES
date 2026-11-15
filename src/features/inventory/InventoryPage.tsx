@@ -467,7 +467,7 @@ export function InventoryPage() {
       <div className="inv-summary-block">
         <span className="inv-summary-label">Posting to</span>
         <strong>{branchLabel(siBranch)}</strong>
-        <span className="faint">{skuFor(siSku) ? skuLabel(skuFor(siSku)!) : 'Select a SKU'}</span>
+        <span className="faint">{skuFor(siSku) ? skuLabel(skuFor(siSku)!) : 'Select a rice variety'}</span>
       </div>
       <div className="inv-summary-rows">
         <div className="inv-summary-row">
@@ -494,7 +494,7 @@ export function InventoryPage() {
       <div className="inv-summary-block">
         <span className="inv-summary-label">Adjusting</span>
         <strong>{branchLabel(adjBranch)}</strong>
-        <span className="faint">{skuFor(adjSku) ? skuLabel(skuFor(adjSku)!) : 'Select a SKU'}</span>
+        <span className="faint">{skuFor(adjSku) ? skuLabel(skuFor(adjSku)!) : 'Select a rice variety'}</span>
       </div>
       <div className="inv-summary-rows">
         <div className="inv-summary-row">
@@ -567,7 +567,7 @@ export function InventoryPage() {
         <strong>
           {branchLabel(trFrom)} → {trTo ? branchLabel(trTo) : 'Destination'}
         </strong>
-        <span className="faint">{skuFor(trSku) ? skuLabel(skuFor(trSku)!) : 'Select a SKU'}</span>
+        <span className="faint">{skuFor(trSku) ? skuLabel(skuFor(trSku)!) : 'Select a rice variety'}</span>
       </div>
       <div className="inv-summary-rows">
         <div className="inv-summary-row">
@@ -704,14 +704,14 @@ export function InventoryPage() {
           }
         >
           {balances.length === 0 ? (
-            <div className="empty-state">No SKUs yet. Add products, then post stock in.</div>
+            <div className="empty-state">No rice varieties yet. Add products, then post stock in.</div>
           ) : (
             <div className="stack">
               <div className="inv-filters">
                 <TextInput
                   className="inv-search"
                   aria-label="Search stock"
-                  placeholder="Search variety, SKU or barcode"
+                  placeholder="Search variety, size or barcode"
                   value={stockSearch}
                   onChange={(e) => setStockSearch(e.target.value)}
                 />
@@ -832,7 +832,7 @@ export function InventoryPage() {
       ) : null}
 
       {tab === 'movements' ? (
-        <Card title="Stock card" subtitle="Movement history for one SKU at one branch">
+        <Card title="Stock card" subtitle="Movement history for one rice variety at one branch">
           <div className="stack">
             <div className="inv-filters">
               <SelectInput
@@ -849,7 +849,7 @@ export function InventoryPage() {
               </SelectInput>
               <SelectInput
                 className="inv-filter-select"
-                aria-label="SKU"
+                aria-label="Rice variety"
                 value={cardSku}
                 onChange={(e) => setCardSku(e.target.value)}
               >
@@ -865,7 +865,7 @@ export function InventoryPage() {
             </div>
 
             {cardRunning.length === 0 ? (
-              <div className="empty-state">No movements for this SKU at this branch.</div>
+              <div className="empty-state">No movements for this rice variety at this branch.</div>
             ) : (
               <Table>
                 <thead>
@@ -994,8 +994,8 @@ export function InventoryPage() {
               </p>
             </div>
             <ul className="inv-repack-list">
-              <li>Input SKU — the larger sack leaving stock</li>
-              <li>Output SKU — the smaller sack entering stock</li>
+              <li>Input sack size — the larger sack leaving stock</li>
+              <li>Output sack size — the smaller sack entering stock</li>
               <li>Input / output weight in kg — used to record weight lost</li>
             </ul>
           </div>
@@ -1017,7 +1017,7 @@ export function InventoryPage() {
               <thead>
                 <tr>
                   <th>When</th>
-                  <th>Branch / SKU</th>
+                  <th>Branch / Rice variety</th>
                   <th>Qty</th>
                   <th>Reason</th>
                   <th>Status</th>
@@ -1112,7 +1112,7 @@ export function InventoryPage() {
               ))}
             </SelectInput>
           </Field>
-          <Field label="SKU" htmlFor="si-sku">
+          <Field label="Rice variety" htmlFor="si-sku">
             <SelectInput id="si-sku" required value={siSku} onChange={(e) => setSiSku(e.target.value)}>
               {skus.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -1173,7 +1173,7 @@ export function InventoryPage() {
               ))}
             </SelectInput>
           </Field>
-          <Field label="SKU" htmlFor="adj-sku">
+          <Field label="Rice variety" htmlFor="adj-sku">
             <SelectInput id="adj-sku" required value={adjSku} onChange={(e) => setAdjSku(e.target.value)}>
               {skus.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -1265,7 +1265,7 @@ export function InventoryPage() {
               </Field>
             </div>
           </div>
-          <Field label="Input SKU (stock out)" htmlFor="rp-out-sku">
+          <Field label="Input sack size (stock out)" htmlFor="rp-out-sku">
             <SelectInput id="rp-out-sku" required value={rpOutSku} onChange={(e) => setRpOutSku(e.target.value)}>
               <option value="">Select larger sack</option>
               {skus.map((s) => (
@@ -1283,7 +1283,7 @@ export function InventoryPage() {
               onChange={(e) => setRpOutSacks(e.target.value)}
             />
           </Field>
-          <Field label="Output SKU (stock in)" htmlFor="rp-in-sku">
+          <Field label="Output sack size (stock in)" htmlFor="rp-in-sku">
             <SelectInput id="rp-in-sku" required value={rpInSku} onChange={(e) => setRpInSku(e.target.value)}>
               <option value="">Select smaller sack</option>
               {skus.map((s) => (
@@ -1355,9 +1355,9 @@ export function InventoryPage() {
                 ))}
             </SelectInput>
           </Field>
-          <Field label="SKU" htmlFor="tr-sku">
+          <Field label="Rice variety" htmlFor="tr-sku">
             <SelectInput id="tr-sku" required value={trSku} onChange={(e) => setTrSku(e.target.value)}>
-              <option value="">Select SKU</option>
+              <option value="">Select rice variety</option>
               {skus.map((s) => (
                 <option key={s.id} value={s.id}>
                   {skuLabel(s)}
@@ -1442,8 +1442,8 @@ export function InventoryPage() {
             </div>
             <p className="inv-summary-note">
               {canCreate
-                ? 'View the movement ledger for this SKU, or post a found-stock / shortage adjustment.'
-                : 'View the movement ledger for this SKU.'}
+                ? 'View the movement ledger for this rice variety, or post a found-stock / shortage adjustment.'
+                : 'View the movement ledger for this rice variety.'}
             </p>
           </div>
         ) : null}
