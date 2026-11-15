@@ -12,11 +12,11 @@ import { ROLE_LABELS, canCreateFundRequest } from '../../lib/roles'
 import {
   fetchReplenishments,
   fetchVouchers,
-  pcfReceiptUrl,
   type PcfFundBalance,
   type PcfReplenishment,
   type PcfVoucher,
 } from '../pcf/pcfApi'
+import { ReceiptPreview } from '../pcf/ReceiptPreview'
 import '../pcf/pcf.css'
 import { createFundRequest } from './fundRequestsApi'
 
@@ -84,6 +84,7 @@ export function RequestFundPanel({
   const [lines, setLines] = useState<RequestLine[]>(() => [newLine()])
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [receiptView, setReceiptView] = useState<{ path: string; label: string } | null>(null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -149,15 +150,6 @@ export function RequestFundPanel({
   const branchLabel = fund?.branch_name ?? 'PCF'
   const companyName = settings?.name ?? 'JMG Commodities Inc.'
   const logoSrc = settings?.logo_url ?? '/JMG COMMODITIES.jpeg'
-
-  async function openReceipt(path: string) {
-    try {
-      const url = await pcfReceiptUrl(path)
-      if (url) window.open(url, '_blank', 'noopener,noreferrer')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
 
   function exportExcel() {
     downloadExcel(
@@ -360,7 +352,12 @@ export function RequestFundPanel({
                 <li key={v.id}>
                   {formatDate(v.voucher_date)} · {v.payee} · {formatPhp(v.amount)}{' '}
                   {v.receipt_path ? (
-                    <Button variant="ghost" onClick={() => void openReceipt(v.receipt_path!)}>
+                    <Button
+                      variant="ghost"
+                      onClick={() =>
+                        setReceiptView({ path: v.receipt_path!, label: `${formatDate(v.voucher_date)} · ${v.payee}` })
+                      }
+                    >
                       View receipt
                     </Button>
                   ) : (
@@ -501,6 +498,12 @@ export function RequestFundPanel({
           </div>
         </div>
       </div>
+
+      <ReceiptPreview
+        path={receiptView?.path ?? null}
+        label={receiptView?.label}
+        onClose={() => setReceiptView(null)}
+      />
     </div>
   )
 }

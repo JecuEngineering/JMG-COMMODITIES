@@ -13,6 +13,7 @@ import { useCompanySettings } from '../settings/useCompanySettings'
 import { formatDate, todayInputValue } from '../../lib/dates'
 import { downloadCsv, downloadExcel, printPage } from '../../lib/export'
 import { formatAmount, formatPhp } from '../../lib/money'
+import { ReceiptPreview } from './ReceiptPreview'
 import { ROLE_LABELS, canManagePcf, canReplenishPcf, canRequestPcfFund, canViewAllBranchesPcf, canViewPcf } from '../../lib/roles'
 import { supabase } from '../../lib/supabase'
 import type { Branch } from '../../types/database'
@@ -110,6 +111,7 @@ export function PcfPage() {
   const receiptInputRef = useRef<HTMLInputElement>(null)
   const [attachVoucher, setAttachVoucher] = useState<PcfVoucher | null>(null)
   const [attachSaving, setAttachSaving] = useState(false)
+  const [receiptView, setReceiptView] = useState<{ path: string; label: string } | null>(null)
   const [voucherSearch, setVoucherSearch] = useState('')
   const [voucherCategory, setVoucherCategory] = useState('')
 
@@ -531,20 +533,6 @@ export function PcfPage() {
   const companyName = settings?.name ?? 'JMG Commodities Inc.'
   const logoSrc = settings?.logo_url ?? '/JMG COMMODITIES.jpeg'
 
-  async function openReceipt(path: string) {
-    setError(null)
-    try {
-      const url = await pcfReceiptUrl(path)
-      if (!url) {
-        setError('Receipt could not be opened.')
-        return
-      }
-      window.open(url, '_blank', 'noopener,noreferrer')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
-
   function pickReceipt(voucher: PcfVoucher) {
     setAttachVoucher(voucher)
     receiptInputRef.current?.click()
@@ -581,7 +569,10 @@ export function PcfPage() {
     if (voucher.receipt_path) {
       return (
         <div className="pcf-receipt-cell">
-          <Button variant="ghost" onClick={() => void openReceipt(voucher.receipt_path!)}>
+          <Button
+            variant="ghost"
+            onClick={() => setReceiptView({ path: voucher.receipt_path!, label: voucherRef(voucher) })}
+          >
             View
           </Button>
           {canManage ? (
@@ -1328,7 +1319,9 @@ export function PcfPage() {
                           <button
                             type="button"
                             className="pcf-receipt-link no-print"
-                            onClick={() => void openReceipt(voucher.receipt_path!)}
+                            onClick={() =>
+                              setReceiptView({ path: voucher.receipt_path!, label: voucherRef(voucher) })
+                            }
                           >
                             receipt
                           </button>
@@ -1651,6 +1644,12 @@ export function PcfPage() {
         tabIndex={-1}
         aria-hidden="true"
         onChange={(e) => void onReceiptPicked(e.target.files?.[0] ?? null)}
+      />
+
+      <ReceiptPreview
+        path={receiptView?.path ?? null}
+        label={receiptView?.label}
+        onClose={() => setReceiptView(null)}
       />
     </div>
   )

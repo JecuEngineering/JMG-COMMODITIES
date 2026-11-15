@@ -8,6 +8,7 @@
 - **Aligned exports**: **Export Excel** (expenses and liquidation report) and **Export CSV** now end every row with a **RECEIPT** cell: `View receipt` for rows that have one, `No receipt` otherwise. Each row therefore stays on the same line as its voucher. `.xls` here is HTML, so receipt images cannot be embedded; instead `receiptLinkMap` creates a **7-day signed URL per path** (`pcfReceiptUrl(path, 604800)`) and `receiptExportCell` returns a `{ text, href }` cell.
 - **`src/lib/export.ts`**: `ExportCell` accepts `{ text, href }`; `downloadExcel` renders it as `<a href="…">text</a>` (real Excel hyperlink) and `downloadCsv` writes the plain URL so the CSV stays aligned too.
 - **CSS**: `.pcf-receipt-cell` (inline-flex, 8 px gap, no wrap) keeps View/Replace on one line.
+- **Preview modal**: `src/features/pcf/ReceiptPreview.tsx` takes `{ path, label, onClose }`, resolves a 1-hour signed URL and renders the image or PDF inside a `size="xl"` `Modal` (`.receipt-preview*` in `pcf.css`); the footer keeps an explicit **Open in new tab** for printing plus **Close**. Every receipt link (expense list, recent vouchers, sheet history, report, Request for Fund) opens this modal instead of `window.open`.
 
 ## Expense attachments + sales layout (2026-11-15)
 
