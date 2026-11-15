@@ -47,11 +47,15 @@ export function Table({ children }: { children: ReactNode }) {
     const row = target.closest('tr')
     if (!row || !row.closest('tbody')) return
 
+    const cells = Array.from(row.querySelectorAll<HTMLTableCellElement>(':scope > td'))
+    // Empty-state rows use one full-width cell and have no fields to show.
+    if (cells.length < 2) return
+
     const table = row.closest('table')
     const headers = Array.from(table?.querySelectorAll('thead th') ?? []).map((th) => trimmedText(th))
     const fields: { label: string; value: string }[] = []
     let index = 0
-    for (const cell of Array.from(row.querySelectorAll<HTMLTableCellElement>(':scope > td'))) {
+    for (const cell of cells) {
       const label = headers[index] ?? ''
       const value = trimmedText(cell)
       if (label && value) fields.push({ label, value })
