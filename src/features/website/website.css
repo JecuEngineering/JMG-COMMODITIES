@@ -609,9 +609,9 @@
 .pub-trucks-bg {
   position: absolute;
   inset: 0;
-  background-image: url('/JMG TRUCKS.jpg');
+  background-image: url('/JMG FLEET.jpg');
   background-size: cover;
-  background-position: center 60%;
+  background-position: center 62%;
   will-change: transform;
 }
 

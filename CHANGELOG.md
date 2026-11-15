@@ -1,5 +1,10 @@
 # Changelog
 
+## New fleet photo on the landing page (2026-11-15)
+
+- The **Our fleet** section background is now `public/JMG FLEET.jpg` (white Isuzu Giga loaded with assorted rice sacks) in place of `JMG TRUCKS.jpg`. Only `.pub-trucks-bg` in `src/features/website/website.css` changed; the landing hero and the login screen keep the original trucks photo.
+- **Verification**: checked in the dev server — `/JMG%20FLEET.jpg` returns 200 and renders behind the existing dark gradient with the section copy still legible.
+
 ## Receipts attachable from the expense list and aligned in exports (2026-11-15)
 
 - **Attach from the list**: the Expenses **Receipt** column (and the recent-voucher list and sheet-history modal) now shows **Attach** for a voucher without a receipt and **View · Replace** when one exists. Picking a photo or PDF uploads it to `pcf-receipts`, writes `pcf_vouchers.receipt_path` and refreshes the list, so the imported November vouchers can get their receipts without re-entering the expense.
