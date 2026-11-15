@@ -106,6 +106,7 @@ export function PcfPage() {
   const [vCategory, setVCategory] = useState<string>(PCF_CLASSIFICATIONS[4])
   const [vAmount, setVAmount] = useState('')
   const [vFile, setVFile] = useState<File | null>(null)
+  const [vFileKey, setVFileKey] = useState(0)
   const [voucherSearch, setVoucherSearch] = useState('')
   const [voucherCategory, setVoucherCategory] = useState('')
 
@@ -367,7 +368,8 @@ export function PcfPage() {
     try {
       let receiptPath: string | null = null
       if (vFile) {
-        const path = `${selectedFundId}/${Date.now()}-${vFile.name}`
+        const safeName = vFile.name.replace(/[^\w.-]+/g, '_')
+        const path = `${selectedFundId}/${Date.now()}-${safeName}`
         const { error: upErr } = await supabase.storage.from('pcf-receipts').upload(path, vFile)
         if (upErr) throw upErr
         receiptPath = path
@@ -388,6 +390,7 @@ export function PcfPage() {
       setVPurpose('')
       setVAmount('')
       setVFile(null)
+      setVFileKey((k) => k + 1)
       await load()
       await loadFundDetail(selectedFundId)
     } catch (e) {
@@ -634,7 +637,7 @@ export function PcfPage() {
             </Button>
           ) : null}
           {canManage && selectedFund ? (
-            <Button onClick={() => setVoucherOpen(true)}>New money out</Button>
+            <Button onClick={() => setVoucherOpen(true)}>Add expense</Button>
           ) : null}
         </div>
       </div>
@@ -1316,8 +1319,8 @@ export function PcfPage() {
         <Modal
           open={voucherOpen}
           onClose={() => setVoucherOpen(false)}
-          title="New money out"
-          subtitle="Petty cash paid out — attach the receipt photo."
+          title="New expense"
+          subtitle="Petty cash paid out — attach the receipt photo or PDF."
           size="sm"
           footer={
             <>
@@ -1325,7 +1328,7 @@ export function PcfPage() {
                 Cancel
               </Button>
               <Button type="submit" form="pcf-voucher-form">
-                Save voucher
+                Save expense
               </Button>
             </>
           }
@@ -1376,13 +1379,39 @@ export function PcfPage() {
               </button>
               .
             </p>
-            <Field label="Receipt photo" htmlFor="pcf-v-file">
-              <input
-                id="pcf-v-file"
-                type="file"
-                accept="image/*"
-                onChange={(e) => setVFile(e.target.files?.[0] ?? null)}
-              />
+            <Field
+              label="Attachment (receipt)"
+              htmlFor="pcf-v-file"
+              hint="Photo or PDF · kept with this expense"
+            >
+              <div className="pcf-attach">
+                <input
+                  key={vFileKey}
+                  id="pcf-v-file"
+                  className="pcf-attach-input"
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setVFile(e.target.files?.[0] ?? null)}
+                />
+                <label htmlFor="pcf-v-file" className="pcf-attach-btn">
+                  {vFile ? 'Replace' : 'Choose file'}
+                </label>
+                <span className={`pcf-attach-name${vFile ? '' : ' is-empty'}`}>
+                  {vFile ? vFile.name : 'No file chosen'}
+                </span>
+                {vFile ? (
+                  <button
+                    type="button"
+                    className="link-button"
+                    onClick={() => {
+                      setVFile(null)
+                      setVFileKey((k) => k + 1)
+                    }}
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </div>
             </Field>
           </form>
         </Modal>

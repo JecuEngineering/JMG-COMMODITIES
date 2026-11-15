@@ -1,5 +1,13 @@
 # Changelog
 
+## Expense attachments, sales history first, Today filter, collect-payment modal (2026-11-15)
+
+- **Expense receipt attachment**: the PCF expense form now has a proper **Attachment (receipt)** field — photo or PDF, with the chosen file name, **Replace** and **Remove**; the old bare "Receipt photo" input is gone. Files are uploaded to `pcf-receipts` with a sanitized name and still open through the receipt **View** links in the ledger, sheet history and report.
+- **Sales history first**: the **Collect installment payment** card no longer sits above the history. It is now a **Collect payment** button in the Sales header that opens a small modal (sale with balance, amount prefilled with the balance, method), and the history card is the first thing on the Sales tab.
+- **Today quick filter**: the sales-history filter row has **Today** (sets From and To to today, highlighted while active) and **All dates** (clears both). Export Excel always writes the filtered ledger, so Today → Export gives the day's rows.
+- **Labels**: the PCF primary action reads **Add expense** / **New expense** instead of "New money out".
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass; the attachment field was rendered with headless Chrome at 560 px and checked (filled and empty states). The authenticated sales screens were not clicked through (no staff login available).
+
 ## PCF expense sheets (cut + history), colored sales money summary, Liquidations removed, SKU renamed (2026-11-15)
 
 - **Expense sheets (cut/close)**: migration `202611150022_pcf_expense_periods.sql` (applied) adds `pcf_periods` — one **open sheet per fund**, every voucher carries `period_id` (assigned by the `pcf_voucher_assign_period` trigger on insert), `v_pcf_period_totals` for counts/totals, and the `close_pcf_period` RPC. **Ending a sheet** stamps its end date, stores it with all its vouchers in history, and immediately opens a new empty sheet. Backfill gave Cebu an open **NOV 9** sheet (29 vouchers / ₱17,339) and Main an open **NOV 15** (0); verified on production.

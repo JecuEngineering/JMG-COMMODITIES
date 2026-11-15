@@ -73,6 +73,7 @@ export function SalesPage() {
 
   const [tab, setTab] = useState<TabId>('sales')
   const [newSaleOpen, setNewSaleOpen] = useState(false)
+  const [payOpen, setPayOpen] = useState(false)
   const [branches, setBranches] = useState<Branch[]>([])
   const [skus, setSkus] = useState<Sku[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -443,6 +444,8 @@ export function SalesPage() {
       })
       setMessage('Payment collected. Balance updated.')
       setPayAmount('')
+      setPaySaleId('')
+      setPayOpen(false)
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -698,7 +701,14 @@ export function SalesPage() {
             and shifts
           </p>
         </div>
-        {canCreate ? <Button onClick={() => setNewSaleOpen(true)}>New sale</Button> : null}
+        {canCreate ? (
+          <div className="row" style={{ gap: 8 }}>
+            <Button variant="secondary" onClick={() => setPayOpen(true)}>
+              Collect payment
+            </Button>
+            <Button onClick={() => setNewSaleOpen(true)}>New sale</Button>
+          </div>
+        ) : null}
       </div>
 
       <ChipRow>
@@ -868,41 +878,67 @@ export function SalesPage() {
           </form>
       </Modal>
 
+      <Modal
+        open={payOpen && canCreate}
+        onClose={() => setPayOpen(false)}
+        title="Collect installment payment"
+        subtitle="The sale balance updates as soon as you save."
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPayOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="collect-form">
+              Collect payment
+            </Button>
+          </>
+        }
+      >
+        <form id="collect-form" className="stack" onSubmit={onCollect}>
+          {error ? <div className="error-banner">{error}</div> : null}
+          <Field label="Sale with balance" htmlFor="pay-sale">
+            <SelectInput
+              id="pay-sale"
+              required
+              value={paySaleId}
+              onChange={(e) => {
+                setPaySaleId(e.target.value)
+                const sale = sales.find((s) => s.id === e.target.value)
+                if (sale) setPayAmount(String(sale.balance))
+              }}
+            >
+              <option value="">Select</option>
+              {sales
+                .filter((s) => Number(s.balance) > 0)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.dr_number} · {s.customer?.name} · bal {formatPhp(s.balance)}
+                  </option>
+                ))}
+            </SelectInput>
+          </Field>
+          <Field label="Amount" htmlFor="pay-amt">
+            <TextInput id="pay-amt" required value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+          </Field>
+          <Field label="Method" htmlFor="pay-method">
+            <SelectInput
+              id="pay-method"
+              value={payMethod}
+              onChange={(e) => setPayMethod(e.target.value as PaymentMethod)}
+            >
+              <option value="cash">Cash</option>
+              <option value="gcash">GCash</option>
+              <option value="bank">Bank</option>
+              <option value="check">Check</option>
+            </SelectInput>
+          </Field>
+          <p className="faint">No interest and no penalty — the amount goes straight to the sale balance.</p>
+        </form>
+      </Modal>
+
       {tab === 'sales' ? (
         <div className="stack">
-          <Card title="Collect installment payment">
-            <form className="stack" onSubmit={onCollect}>
-              <Field label="Sale with balance" htmlFor="pay-sale">
-                <SelectInput id="pay-sale" required value={paySaleId} onChange={(e) => setPaySaleId(e.target.value)}>
-                  <option value="">Select</option>
-                  {sales
-                    .filter((s) => Number(s.balance) > 0)
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.dr_number} · {s.customer?.name} · bal {formatPhp(s.balance)}
-                      </option>
-                    ))}
-                </SelectInput>
-              </Field>
-              <Field label="Amount" htmlFor="pay-amt">
-                <TextInput id="pay-amt" required value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
-              </Field>
-              <Field label="Method" htmlFor="pay-method">
-                <SelectInput
-                  id="pay-method"
-                  value={payMethod}
-                  onChange={(e) => setPayMethod(e.target.value as PaymentMethod)}
-                >
-                  <option value="cash">Cash</option>
-                  <option value="gcash">GCash</option>
-                  <option value="bank">Bank</option>
-                  <option value="check">Check</option>
-                </SelectInput>
-              </Field>
-              {canCreate ? <Button type="submit">Collect payment</Button> : null}
-            </form>
-          </Card>
-
           <Card
             title="Sales history"
             subtitle={`${ledgerSales.length} of ${sales.length} sale(s) · ${formatQty(historyBags)} bag(s)`}
@@ -934,6 +970,32 @@ export function SalesPage() {
                     placeholder="Customer, DR or OR number"
                   />
                 </Field>
+              </div>
+              <div className="row" style={{ gap: 8, paddingBottom: 2 }}>
+                <Button
+                  variant={
+                    historyFrom === todayInputValue() && historyTo === todayInputValue()
+                      ? 'primary'
+                      : 'secondary'
+                  }
+                  onClick={() => {
+                    setHistoryFrom(todayInputValue())
+                    setHistoryTo(todayInputValue())
+                  }}
+                >
+                  Today
+                </Button>
+                {historyFrom || historyTo ? (
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setHistoryFrom('')
+                      setHistoryTo('')
+                    }}
+                  >
+                    All dates
+                  </Button>
+                ) : null}
               </div>
             </div>
             <div className="sales-money" aria-label="Money summary">
