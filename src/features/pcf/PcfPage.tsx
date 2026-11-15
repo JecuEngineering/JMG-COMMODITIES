@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -107,6 +107,9 @@ export function PcfPage() {
   const [vAmount, setVAmount] = useState('')
   const [vFile, setVFile] = useState<File | null>(null)
   const [vFileKey, setVFileKey] = useState(0)
+  const receiptInputRef = useRef<HTMLInputElement>(null)
+  const [attachVoucher, setAttachVoucher] = useState<PcfVoucher | null>(null)
+  const [attachSaving, setAttachSaving] = useState(false)
   const [voucherSearch, setVoucherSearch] = useState('')
   const [voucherCategory, setVoucherCategory] = useState('')
 
@@ -542,11 +545,90 @@ export function PcfPage() {
     }
   }
 
-  function exportLiquidationExcel() {
+  function pickReceipt(voucher: PcfVoucher) {
+    setAttachVoucher(voucher)
+    receiptInputRef.current?.click()
+  }
+
+  async function onReceiptPicked(file: File | null) {
+    const voucher = attachVoucher
+    if (!file || !voucher || !selectedFundId) return
+    setAttachSaving(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const safeName = file.name.replace(/[^\w.-]+/g, '_')
+      const path = `${selectedFundId}/${Date.now()}-${safeName}`
+      const { error: uploadError } = await supabase.storage.from('pcf-receipts').upload(path, file)
+      if (uploadError) throw uploadError
+      const { error: updateError } = await supabase
+        .from('pcf_vouchers')
+        .update({ receipt_path: path })
+        .eq('id', voucher.id)
+      if (updateError) throw updateError
+      setMessage(`Receipt attached to ${voucherRef(voucher)}.`)
+      await loadFundDetail(selectedFundId)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setAttachSaving(false)
+      setAttachVoucher(null)
+      if (receiptInputRef.current) receiptInputRef.current.value = ''
+    }
+  }
+
+  function receiptCell(voucher: PcfVoucher) {
+    if (voucher.receipt_path) {
+      return (
+        <div className="pcf-receipt-cell">
+          <Button variant="ghost" onClick={() => void openReceipt(voucher.receipt_path!)}>
+            View
+          </Button>
+          {canManage ? (
+            <button type="button" className="link-button" onClick={() => pickReceipt(voucher)}>
+              Replace
+            </button>
+          ) : null}
+        </div>
+      )
+    }
+    return canManage ? (
+      <Button variant="ghost" disabled={attachSaving} onClick={() => pickReceipt(voucher)}>
+        Attach
+      </Button>
+    ) : (
+      <span className="faint">None</span>
+    )
+  }
+
+  async function receiptLinkMap(list: PcfVoucher[]): Promise<Map<string, string>> {
+    const paths = [...new Set(list.map((v) => v.receipt_path).filter((p): p is string => Boolean(p)))]
+    const pairs = await Promise.all(
+      paths.map(async (path) => {
+        try {
+          const url = await pcfReceiptUrl(path, 60 * 60 * 24 * 7)
+          return [path, url ?? ''] as const
+        } catch {
+          return [path, ''] as const
+        }
+      }),
+    )
+    return new Map(pairs)
+  }
+
+  function receiptExportCell(voucher: PcfVoucher, links: Map<string, string>) {
+    if (!voucher.receipt_path) return 'No receipt'
+    const url = links.get(voucher.receipt_path)
+    if (url) return { text: 'View receipt', href: url }
+    return voucher.receipt_path.split('/').pop() ?? 'Receipt'
+  }
+
+  async function exportLiquidationExcel() {
+    const links = await receiptLinkMap(reportVouchers)
     downloadExcel(
       `pcf-liquidation-${branchLabel.replace(/\s+/g, '-')}-${reportPeriod?.label.replace(/\s+/g, '-') ?? todayInputValue()}.xls`,
       `PCF ${reportPeriod?.label ?? 'Liquidation'}`,
-      ['DATE', 'PCV#', 'DESCRIPTION', ...PCF_CLASSIFICATIONS, 'AMOUNT'],
+      ['DATE', 'PCV#', 'DESCRIPTION', ...PCF_CLASSIFICATIONS, 'AMOUNT', 'RECEIPT'],
       [
         ...liquidationRows.map((row) => [
           sheetDate(row.voucher.voucher_date),
@@ -554,6 +636,7 @@ export function PcfPage() {
           row.voucher.payee,
           ...PCF_CLASSIFICATIONS.map((c) => (c === row.classification ? row.amount.toFixed(2) : '')),
           row.amount.toFixed(2),
+          receiptExportCell(row.voucher, links),
         ]),
         [
           '',
@@ -564,16 +647,18 @@ export function PcfPage() {
             return total ? total.toFixed(2) : ''
           }),
           periodTotals.expense.toFixed(2),
+          '',
         ],
       ],
     )
   }
 
-  function exportExpensesExcel() {
+  async function exportExpensesExcel() {
+    const links = await receiptLinkMap(filteredVouchers)
     downloadExcel(
       `pcf-expenses-${branchLabel.replace(/\s+/g, '-')}-${openPeriod?.label.replace(/\s+/g, '-') ?? todayInputValue()}.xls`,
       'PCF Expenses',
-      ['DATE', 'PCV#', 'DESCRIPTION', 'PURPOSE', 'CLASSIFICATION', 'AMOUNT'],
+      ['DATE', 'PCV#', 'DESCRIPTION', 'PURPOSE', 'CLASSIFICATION', 'AMOUNT', 'RECEIPT'],
       [
         ...filteredVouchers.map((v) => [
           v.voucher_date,
@@ -582,16 +667,18 @@ export function PcfPage() {
           v.purpose ?? '',
           pcfClassification(v.category),
           Number(v.amount).toFixed(2),
+          receiptExportCell(v, links),
         ]),
-        ['', '', '', '', 'TOTAL', filteredVoucherTotal.toFixed(2)],
+        ['', '', '', '', 'TOTAL', filteredVoucherTotal.toFixed(2), ''],
       ],
     )
   }
 
-  function exportExpensesCsv() {
+  async function exportExpensesCsv() {
+    const links = await receiptLinkMap(filteredVouchers)
     downloadCsv(
       `pcf-expenses-${branchLabel.replace(/\s+/g, '-')}-${openPeriod?.label.replace(/\s+/g, '-') ?? todayInputValue()}.csv`,
-      ['DATE', 'PCV#', 'DESCRIPTION', 'PURPOSE', 'CLASSIFICATION', 'AMOUNT'],
+      ['DATE', 'PCV#', 'DESCRIPTION', 'PURPOSE', 'CLASSIFICATION', 'AMOUNT', 'RECEIPT'],
       [
         ...filteredVouchers.map((v) => [
           v.voucher_date,
@@ -600,8 +687,9 @@ export function PcfPage() {
           v.purpose ?? '',
           pcfClassification(v.category),
           Number(v.amount).toFixed(2),
+          receiptExportCell(v, links),
         ]),
-        ['', '', '', '', 'TOTAL', filteredVoucherTotal.toFixed(2)],
+        ['', '', '', '', 'TOTAL', filteredVoucherTotal.toFixed(2), ''],
       ],
     )
   }
@@ -782,15 +870,7 @@ export function PcfPage() {
                           <td>{v.purpose ?? '—'}</td>
                           <td>{v.category ?? '—'}</td>
                           <td className="pcf-cell-amount">{formatPhp(v.amount)}</td>
-                          <td>
-                            {v.receipt_path ? (
-                              <Button variant="ghost" onClick={() => void openReceipt(v.receipt_path!)}>
-                                View
-                              </Button>
-                            ) : (
-                              '—'
-                            )}
-                          </td>
+                          <td>{receiptCell(v)}</td>
                           <td>
                             <span className={`pcf-status${unrecoveredIds.has(v.id) ? ' is-pending' : ''}`}>
                               {unrecoveredIds.has(v.id) ? 'Not replenished' : 'Replenished'}
@@ -985,10 +1065,10 @@ export function PcfPage() {
               </Field>
             </div>
             <div className="row" style={{ gap: 8, margin: '12px 0' }}>
-              <Button variant="secondary" onClick={exportExpensesExcel}>
+              <Button variant="secondary" onClick={() => void exportExpensesExcel()}>
                 Export Excel
               </Button>
-              <Button variant="secondary" onClick={exportExpensesCsv}>
+              <Button variant="secondary" onClick={() => void exportExpensesCsv()}>
                 Export CSV
               </Button>
               <Button variant="ghost" onClick={printPage}>
@@ -1023,15 +1103,7 @@ export function PcfPage() {
                       <td>{pcfClassification(v.category)}</td>
                       <td>{v.purpose ?? '—'}</td>
                       <td className="pcf-cell-amount">{formatPhp(v.amount)}</td>
-                      <td>
-                        {v.receipt_path ? (
-                          <Button variant="ghost" onClick={() => void openReceipt(v.receipt_path!)}>
-                            View
-                          </Button>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
+                      <td>{receiptCell(v)}</td>
                       <td>
                         <span className={`pcf-status${unrecoveredIds.has(v.id) ? ' is-pending' : ''}`}>
                           {unrecoveredIds.has(v.id) ? 'Not replenished' : 'Replenished'}
@@ -1187,7 +1259,7 @@ export function PcfPage() {
               Balance {formatPhp(periodTotals.closing)}
             </p>
             <div className="row" style={{ gap: 8, marginTop: 12 }}>
-              <Button variant="secondary" onClick={exportLiquidationExcel}>
+              <Button variant="secondary" onClick={() => void exportLiquidationExcel()}>
                 Export liquidation Excel
               </Button>
               <Button variant="ghost" onClick={printPage}>
@@ -1511,15 +1583,7 @@ export function PcfPage() {
                     <td className="pcf-cell-primary">{v.payee}</td>
                     <td>{pcfClassification(v.category)}</td>
                     <td className="pcf-cell-amount">{formatPhp(v.amount)}</td>
-                    <td>
-                      {v.receipt_path ? (
-                        <Button variant="ghost" onClick={() => void openReceipt(v.receipt_path!)}>
-                          View
-                        </Button>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
+                    <td>{receiptCell(v)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1578,6 +1642,16 @@ export function PcfPage() {
           </form>
         </Modal>
       ) : null}
+
+      <input
+        ref={receiptInputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(e) => void onReceiptPicked(e.target.files?.[0] ?? null)}
+      />
     </div>
   )
 }

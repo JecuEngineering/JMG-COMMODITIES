@@ -1,5 +1,11 @@
 # Changelog
 
+## Receipts attachable from the expense list and aligned in exports (2026-11-15)
+
+- **Attach from the list**: the Expenses **Receipt** column (and the recent-voucher list and sheet-history modal) now shows **Attach** for a voucher without a receipt and **View · Replace** when one exists. Picking a photo or PDF uploads it to `pcf-receipts`, writes `pcf_vouchers.receipt_path` and refreshes the list, so the imported November vouchers can get their receipts without re-entering the expense.
+- **Exports carry the receipt**: `downloadExcel`/`downloadCsv` accept link cells (`{ text, href }`); **Export Excel** writes a real hyperlink and **Export CSV** writes the URL. Both the expense exports and the liquidation-matrix export gained a **RECEIPT** column on the same row as the expense — "No receipt" when missing, a **View receipt** link (7-day signed URL) when present, so rows stay aligned instead of receipts being a separate pile.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass; the link-cell export format was built locally. Attaching a live file and opening the exported workbook were not exercised (no staff login / file picker in the agent browser).
+
 ## Expense attachments, sales history first, Today filter, collect-payment modal (2026-11-15)
 
 - **Expense receipt attachment**: the PCF expense form now has a proper **Attachment (receipt)** field — photo or PDF, with the chosen file name, **Replace** and **Remove**; the old bare "Receipt photo" input is gone. Files are uploaded to `pcf-receipts` with a sanitized name and still open through the receipt **View** links in the ledger, sheet history and report.

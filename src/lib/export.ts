@@ -1,4 +1,15 @@
-export type ExportCell = string | number | null | undefined
+export type ExportCell =
+  | string
+  | number
+  | null
+  | undefined
+  | { text: string; href: string }
+
+function cellText(value: ExportCell): string {
+  if (value == null) return ''
+  if (typeof value === 'object') return value.href
+  return String(value)
+}
 
 function triggerDownload(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob)
@@ -10,7 +21,7 @@ function triggerDownload(filename: string, blob: Blob) {
 }
 
 function escapeCsv(value: ExportCell): string {
-  const s = value == null ? '' : String(value)
+  const s = cellText(value)
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
@@ -20,13 +31,19 @@ export function downloadCsv(filename: string, headers: string[], rows: ExportCel
   triggerDownload(filename, new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' }))
 }
 
-function escapeHtml(value: ExportCell): string {
-  const s = value == null ? '' : String(value)
-  return s
+function escapeHtml(value: string): string {
+  return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+}
+
+function excelCell(value: ExportCell): string {
+  if (value != null && typeof value === 'object') {
+    return `<td><a href="${escapeHtml(value.href)}">${escapeHtml(value.text)}</a></td>`
+  }
+  return `<td>${escapeHtml(value == null ? '' : String(value))}</td>`
 }
 
 /** SpreadsheetML/HTML table with an .xls extension — opens natively in Excel. */
@@ -38,12 +55,7 @@ export function downloadExcel(
 ) {
   const head = headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('')
   const body = rows
-    .map(
-      (row) =>
-        `<tr>${row
-          .map((cell) => `<td>${escapeHtml(cell)}</td>`)
-          .join('')}</tr>`,
-    )
+    .map((row) => `<tr>${row.map((cell) => excelCell(cell)).join('')}</tr>`)
     .join('')
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8" />

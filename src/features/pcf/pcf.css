@@ -676,6 +676,17 @@
   font-size: 0.82rem;
 }
 
+.pcf-receipt-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.pcf-receipt-cell .link-button {
+  font-size: 0.78rem;
+}
+
 @media print {
   .no-print,
   .shell-sidebar,

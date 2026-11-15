@@ -178,8 +178,8 @@ export async function fetchVouchers(fundId?: string): Promise<PcfVoucher[]> {
 }
 
 /** Short-lived signed URL for a receipt stored in the private pcf-receipts bucket. */
-export async function pcfReceiptUrl(path: string): Promise<string | null> {
-  const { data, error } = await supabase.storage.from('pcf-receipts').createSignedUrl(path, 3600)
+export async function pcfReceiptUrl(path: string, expiresIn = 3600): Promise<string | null> {
+  const { data, error } = await supabase.storage.from('pcf-receipts').createSignedUrl(path, expiresIn)
   if (error) throw error
   return data?.signedUrl ?? null
 }
