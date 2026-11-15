@@ -316,6 +316,52 @@
   font-weight: 600;
 }
 
+/* On phones a tap opens the full row, so rows read as tappable. */
+@media (max-width: 719px) {
+  .ui-table-wrap tbody tr {
+    cursor: pointer;
+  }
+}
+
+.ui-row-detail {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.ui-row-detail-item {
+  display: grid;
+  grid-template-columns: minmax(90px, 38%) 1fr;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ui-row-detail-item:first-child {
+  padding-top: 0;
+}
+
+.ui-row-detail-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.ui-row-detail-item dt {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+  padding-top: 2px;
+}
+
+.ui-row-detail-item dd {
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
 /* ── Loading states ───────────────────────────────────────── */
 @keyframes ui-spin {
   to {

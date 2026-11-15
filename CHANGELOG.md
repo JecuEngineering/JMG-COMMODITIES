@@ -1,5 +1,12 @@
 # Changelog
 
+## Tap any table row on a phone to see every field (2026-11-15)
+
+- **Why**: wide tables (Sales ledger, Petty cash, Inventory, …) need sideways scrolling on a phone, so the row you are reading scrolls out of view.
+- **What**: the shared `Table` component detects phones (`max-width: 719px` via `matchMedia`) and a tap on any data row opens a **Row details** modal with every non-empty field as a label/value pair (e.g. `ALDERI · AC-1991`, then Date, Invoice, Name, Description, Bags, Price, Amount, Receipt). One change covers every module and list that uses `Table`; tablet/desktop rows are untouched.
+- **Buttons still work**: taps on a button/link/input inside a row (View, Attach, Replace, Edit, …) are ignored by the row handler, so those keep their own action. Totals rows are not clickable.
+- **Verification**: rendered a sample table in the dev server at a phone width, tapped a row (modal opened with all values), confirmed the title picks name + reference, and confirmed tapping the row's **View** button does not open the details.
+
 ## Mobile layout no longer zooms out on Sales and Petty cash (2026-11-15)
 
 - **Cause**: `.shell` used a `1fr` grid column, whose automatic minimum is the widest child. The 11-column Sales-In ledger (and the 1080 px PCF matrix) made the page ~1025 px wide on a 390 px phone, so the mobile browser shrank the whole UI and it looked like the tablet/desktop layout after switching modules. The receipt/description cells had the same effect on Petty cash.
