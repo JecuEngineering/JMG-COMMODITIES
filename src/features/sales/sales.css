@@ -277,10 +277,23 @@
   color: var(--color-jade-dark);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 719px) {
   .sales-money-main,
   .sales-money-pay {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Long peso values need the full row on a phone. */
+  .sales-money-card {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+  }
+
+  .sales-money-main .sales-money-card strong {
+    font-size: 1.2rem;
   }
 }
 

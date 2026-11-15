@@ -1,5 +1,12 @@
 # Changelog
 
+## Mobile layout no longer zooms out on Sales and Petty cash (2026-11-15)
+
+- **Cause**: `.shell` used a `1fr` grid column, whose automatic minimum is the widest child. The 11-column Sales-In ledger (and the 1080 px PCF matrix) made the page ~1025 px wide on a 390 px phone, so the mobile browser shrank the whole UI and it looked like the tablet/desktop layout after switching modules. The receipt/description cells had the same effect on Petty cash.
+- **Fix**: the shell now uses `minmax(0, 1fr)` (mobile and the desktop content column) and `.shell-main`/`.shell-content` get `min-width: 0`. Wide tables scroll inside `.ui-table-wrap` / `.pcf-matrix-wrap` instead of stretching the page; verified with a 390 px harness — `scrollWidth` dropped from **1025 → 390**.
+- **Forms**: `.ui-input` is 16 px below 720 px so iOS no longer zooms in when a field gets focus.
+- **Sales money summary**: below 720 px the six cards stack one per row with the label and value on a single line, so `₱56,459,750.00` no longer spills into the neighbouring card.
+
 ## New fleet photo on the landing page (2026-11-15)
 
 - The **Our fleet** section background is now `public/JMG FLEET.jpg` (white Isuzu Giga loaded with assorted rice sacks) in place of `JMG TRUCKS.jpg`. Only `.pub-trucks-bg` in `src/features/website/website.css` changed; the landing hero and the login screen keep the original trucks photo.

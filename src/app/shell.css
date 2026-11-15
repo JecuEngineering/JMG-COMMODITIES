@@ -2,8 +2,13 @@
 .shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 1fr;
+  /* minmax(0, …) stops wide tables from widening the whole app page. */
+  grid-template-columns: minmax(0, 1fr);
   background: var(--color-bg);
+}
+
+.shell-main {
+  min-width: 0;
 }
 
 /* Mobile: sidebar hidden */
@@ -216,6 +221,7 @@
 
 /* ── Content ──────────────────────────────────────────────── */
 .shell-content {
+  min-width: 0;
   min-height: calc(100vh - var(--header-height) - var(--bottom-nav-height));
 }
 
@@ -381,7 +387,7 @@
 /* ── Desktop layout ───────────────────────────────────────── */
 @media (min-width: 720px) {
   .shell {
-    grid-template-columns: var(--sidebar-width) 1fr;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   }
 
   /* Show sidebar, hide topbar and bottom-nav */
