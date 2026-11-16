@@ -103,53 +103,56 @@ export function ReportsPage() {
     setLoading(true)
     setError(null)
     try {
-      const b = await fetchBranches()
-      setBranches(b)
-      setBranchId((prev) => (prev ? prev : canViewAll ? 'all' : profileBranchId ?? 'all'))
-
       const branch = branchId === 'all' ? null : branchId
-      const [salesRes, expRes, shiftRes] = await Promise.all([
-        supabase
-          .from('sales')
-          .select(
-            'id, branch_id, sale_date, total, amount_paid, balance, payment_type, dr_number, customer:customers(name), branch:branches(name), items:sale_items(sku_id, sacks, price_per_sack, line_total, sku:skus(variety:varieties(name)))',
-          )
-          .is('deleted_at', null)
-          .eq('status', 'completed')
-          .gte('sale_date', fromDate)
-          .lte('sale_date', toDate)
-          .order('sale_date', { ascending: false }),
-        supabase
-          .from('expenses')
-          .select('id, branch_id, expense_date, amount, category:expense_categories(name), branch:branches(name)')
-          .is('deleted_at', null)
-          .gte('expense_date', fromDate)
-          .lte('expense_date', toDate)
-          .order('expense_date', { ascending: false }),
-        supabase
-          .from('cashier_shifts')
-          .select('id, branch_id, status, opened_at, closed_at, opening_cash, expected_cash, counted_cash')
-          .order('opened_at', { ascending: false }),
+
+      let salesQuery = supabase
+        .from('sales')
+        .select(
+          'id, branch_id, sale_date, total, amount_paid, balance, payment_type, dr_number, customer:customers(name), branch:branches(name), items:sale_items(sku_id, sacks, price_per_sack, line_total, sku:skus(variety:varieties(name)))',
+        )
+        .is('deleted_at', null)
+        .eq('status', 'completed')
+        .gte('sale_date', fromDate)
+        .lte('sale_date', toDate)
+        .order('sale_date', { ascending: false })
+      if (branch) salesQuery = salesQuery.eq('branch_id', branch)
+
+      let expenseQuery = supabase
+        .from('expenses')
+        .select('id, branch_id, expense_date, amount, category:expense_categories(name), branch:branches(name)')
+        .is('deleted_at', null)
+        .gte('expense_date', fromDate)
+        .lte('expense_date', toDate)
+        .order('expense_date', { ascending: false })
+      if (branch) expenseQuery = expenseQuery.eq('branch_id', branch)
+
+      let shiftQuery = supabase
+        .from('cashier_shifts')
+        .select('id, branch_id, status, opened_at, closed_at, opening_cash, expected_cash, counted_cash')
+        .order('opened_at', { ascending: false })
+        .limit(200)
+      if (branch) shiftQuery = shiftQuery.eq('branch_id', branch)
+
+      const [b, salesRes, expRes, shiftRes] = await Promise.all([
+        fetchBranches(),
+        salesQuery,
+        expenseQuery,
+        shiftQuery,
       ])
       if (salesRes.error) throw salesRes.error
       if (expRes.error) throw expRes.error
       if (shiftRes.error) throw shiftRes.error
 
-      let s = (salesRes.data as unknown as SaleRow[]) ?? []
-      let e = (expRes.data as unknown as ExpenseRow[]) ?? []
-      if (branch) {
-        s = s.filter((r) => r.branch_id === branch)
-        e = e.filter((r) => r.branch_id === branch)
-      }
-      setSales(s)
-      setExpenses(e)
+      setBranches(b)
+      setSales((salesRes.data as unknown as SaleRow[]) ?? [])
+      setExpenses((expRes.data as unknown as ExpenseRow[]) ?? [])
       setShifts((shiftRes.data as ShiftRow[]) ?? [])
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setLoading(false)
     }
-  }, [branchId, fromDate, toDate, canViewAll, profileBranchId])
+  }, [branchId, fromDate, toDate])
 
   useEffect(() => {
     if (canView) void load()

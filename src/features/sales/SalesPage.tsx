@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { ScopePill } from '../../components/ScopePill'
@@ -144,20 +144,19 @@ export function SalesPage() {
     setLoading(true)
     setError(null)
     try {
-      const b = await fetchBranches()
-      const s = await fetchSkus()
+      const [b, s, saleRows, dues, open] = await Promise.all([
+        fetchBranches(),
+        fetchSkus(),
+        fetchSales(canViewAll ? null : profileBranchId || null),
+        fetchOverdueDues(),
+        user && profileBranchId ? fetchOpenShift(user.id, profileBranchId) : Promise.resolve(null),
+      ])
       const defaultBranch = profileBranchId || b[0]?.id || ''
       setBranches(b)
       setSkus(s)
       setBranchId((prev) => prev || defaultBranch)
       if (s[0]?.variety_id) setVarietyId((prev) => prev || s[0].variety_id)
 
-      const branch = profileBranchId || defaultBranch
-      const [saleRows, dues, open] = await Promise.all([
-        fetchSales(canViewAll ? null : branch),
-        fetchOverdueDues(),
-        user ? fetchOpenShift(user.id, branch) : Promise.resolve(null),
-      ])
       setSales(saleRows)
       setOverdue(dues)
       setShift(open)
@@ -167,7 +166,7 @@ export function SalesPage() {
       setLoading(false)
       setFirstLoad(false)
     }
-  }, [profileBranchId, role, user])
+  }, [canViewAll, profileBranchId, user])
 
   useEffect(() => {
     if (canView) void load()
@@ -305,6 +304,11 @@ export function SalesPage() {
 
   const ledgerPager = usePaged(ledgerSales, 10)
   const overduePager = usePaged(overdue, 10)
+  const ledgerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    ledgerRef.current?.scrollTo({ top: 0 })
+  }, [ledgerPager.page, ledgerPager.pageSize, ledgerSales])
 
   if (!canView) {
     return (
@@ -1073,7 +1077,13 @@ export function SalesPage() {
             {ledgerSales.length === 0 ? (
               <div className="empty-state">No sales for this filter.</div>
             ) : (
-              <div className="sales-ledger">
+              <div
+                className="sales-ledger"
+                ref={ledgerRef}
+                role="region"
+                aria-label="Sales history list"
+                tabIndex={0}
+              >
                 <Table className="ui-table-fluid">
                   <thead>
                     <tr>

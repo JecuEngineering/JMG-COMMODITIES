@@ -165,17 +165,105 @@ export async function createSale(input: {
   return data as string
 }
 
-export async function fetchSales(branchId?: string | null): Promise<Sale[]> {
+export interface SalesDayTotal {
+  sale_date: string
+  total: number
+}
+
+const SALE_LIST_SELECT =
+  'id, branch_id, customer_id, cashier_id, sale_date, status, payment_type, subtotal, discount, total, amount_paid, balance, dr_number, or_number, notes, created_at, ' +
+  'customer:customers(id, name), ' +
+  'items:sale_items(id, sale_id, sku_id, sacks, price_per_sack, discount, line_total, source_description, sku:skus(id, sack_size, variety_id, variety:varieties(id, name))), ' +
+  'payments(id, sale_id, payment_date, amount, method, reference_no)'
+
+/**
+ * History list payload. Nested rows are trimmed to the fields the ledger,
+ * money summary and DR print use, and `branch` is omitted because no screen
+ * reads it from a sale row.
+ */
+export async function fetchSales(
+  branchId?: string | null,
+  opts?: { since?: string; limit?: number },
+): Promise<Sale[]> {
   let q = supabase
     .from('sales')
-    .select('*, customer:customers(*), branch:branches(*), items:sale_items(*, sku:skus(*, variety:varieties(*))), payments(*)')
+    .select(SALE_LIST_SELECT)
     .is('deleted_at', null)
     .order('sale_date', { ascending: false })
     .order('created_at', { ascending: false })
   if (branchId) q = q.eq('branch_id', branchId)
+  if (opts?.since) q = q.gte('sale_date', opts.since)
+  if (opts?.limit) q = q.limit(opts.limit)
   const { data, error } = await q
   if (error) throw error
-  return (data as Sale[]) ?? []
+  return (data as unknown as Sale[]) ?? []
+}
+
+/**
+ * Dashboard-only aggregates. Each query selects just the columns it sums, so
+ * the dashboard never downloads the full sale + item + payment graph.
+ */
+export async function fetchSalesDayTotals(branchId: string | null, since: string): Promise<SalesDayTotal[]> {
+  let q = supabase.from('sales').select('sale_date, total').is('deleted_at', null).gte('sale_date', since)
+  if (branchId) q = q.eq('branch_id', branchId)
+  const { data, error } = await q
+  if (error) throw error
+  return ((data as { sale_date: string; total: number }[]) ?? []).map((row) => ({
+    sale_date: row.sale_date,
+    total: Number(row.total),
+  }))
+}
+
+export async function fetchOpenBalanceTotal(
+  branchId: string | null,
+): Promise<{ total: number; count: number }> {
+  let q = supabase.from('sales').select('balance').is('deleted_at', null).gt('balance', 0)
+  if (branchId) q = q.eq('branch_id', branchId)
+  const { data, error } = await q
+  if (error) throw error
+  const rows = (data as { balance: number }[]) ?? []
+  return { total: rows.reduce((sum, row) => sum + Number(row.balance), 0), count: rows.length }
+}
+
+export async function fetchCashCollected(
+  branchId: string | null,
+  dates: string[],
+): Promise<{ payment_date: string; amount: number }[]> {
+  let q = supabase
+    .from('payments')
+    .select('amount, payment_date, sale:sales!inner(branch_id, deleted_at)')
+    .eq('method', 'cash')
+    .in('payment_date', dates)
+    .is('sale.deleted_at', null)
+  if (branchId) q = q.eq('sale.branch_id', branchId)
+  const { data, error } = await q
+  if (error) throw error
+  return ((data as { amount: number; payment_date: string }[]) ?? []).map((row) => ({
+    payment_date: row.payment_date,
+    amount: Number(row.amount),
+  }))
+}
+
+/** Top varieties by revenue since `since`, one embedded query against sale items. */
+export async function fetchVarietyTotals(branchId: string | null, since: string): Promise<[string, number][]> {
+  let q = supabase
+    .from('sale_items')
+    .select(
+      'line_total, sku:skus(variety:varieties(name)), sale:sales!inner(branch_id, sale_date, deleted_at)',
+    )
+    .gte('sale.sale_date', since)
+    .is('sale.deleted_at', null)
+  if (branchId) q = q.eq('sale.branch_id', branchId)
+  const { data, error } = await q
+  if (error) throw error
+
+  const totals = new Map<string, number>()
+  for (const row of (data as unknown as { line_total: number; sku: { variety: { name: string } | null } | null }[]) ??
+    []) {
+    const name = row.sku?.variety?.name ?? 'Other'
+    totals.set(name, (totals.get(name) ?? 0) + Number(row.line_total))
+  }
+  return [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
 }
 
 export async function fetchSale(id: string): Promise<Sale | null> {

@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { cachedQuery } from '../../lib/queryCache'
 import type {
   Branch,
   Sku,
@@ -19,46 +20,42 @@ export interface StockBalanceRow {
   is_low: boolean
 }
 
-export async function fetchBranches(): Promise<Branch[]> {
-  const { data, error } = await supabase
-    .from('branches')
-    .select('*')
-    .is('deleted_at', null)
-    .eq('active', true)
-    .order('name')
-  if (error) throw error
-  return (data as Branch[]) ?? []
+export function fetchBranches(): Promise<Branch[]> {
+  return cachedQuery('ref:branches', async () => {
+    const { data, error } = await supabase
+      .from('branches')
+      .select('*')
+      .is('deleted_at', null)
+      .eq('active', true)
+      .order('name')
+    if (error) throw error
+    return (data as Branch[]) ?? []
+  })
 }
 
-export async function fetchSkus(): Promise<Sku[]> {
-  const { data, error } = await supabase
-    .from('skus')
-    .select('*, variety:varieties(*)')
-    .is('deleted_at', null)
-    .eq('active', true)
-    .order('sack_size')
-  if (error) throw error
-  return (data as Sku[]) ?? []
+export function fetchSkus(): Promise<Sku[]> {
+  return cachedQuery('ref:skus', async () => {
+    const { data, error } = await supabase
+      .from('skus')
+      .select('*, variety:varieties(*)')
+      .is('deleted_at', null)
+      .eq('active', true)
+      .order('sack_size')
+    if (error) throw error
+    return (data as Sku[]) ?? []
+  })
 }
 
 export async function fetchStockBalances(branchId?: string | null): Promise<StockBalanceRow[]> {
-  const [skus, branches, movements] = await Promise.all([
-    fetchSkus(),
-    fetchBranches(),
-    supabase
-      .from('stock_movements')
-      .select('branch_id, sku_id, quantity')
-      .then((res) => {
-        if (res.error) throw res.error
-        return res.data ?? []
-      }),
-  ])
+  let balanceQuery = supabase.from('v_stock_on_hand').select('branch_id, sku_id, on_hand')
+  if (branchId) balanceQuery = balanceQuery.eq('branch_id', branchId)
+
+  const [skus, branches, balanceRes] = await Promise.all([fetchSkus(), fetchBranches(), balanceQuery])
+  if (balanceRes.error) throw balanceRes.error
 
   const totals = new Map<string, number>()
-  for (const row of movements as { branch_id: string; sku_id: string; quantity: number }[]) {
-    if (branchId && row.branch_id !== branchId) continue
-    const key = `${row.branch_id}:${row.sku_id}`
-    totals.set(key, (totals.get(key) ?? 0) + Number(row.quantity))
+  for (const row of (balanceRes.data ?? []) as { branch_id: string; sku_id: string; on_hand: number }[]) {
+    totals.set(`${row.branch_id}:${row.sku_id}`, Number(row.on_hand))
   }
 
   const scopedBranches = branchId ? branches.filter((b) => b.id === branchId) : branches

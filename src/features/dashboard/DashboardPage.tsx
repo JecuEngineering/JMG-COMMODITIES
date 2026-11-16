@@ -14,10 +14,17 @@ import {
   canViewSales,
 } from '../../lib/roles'
 import { fetchBranches, fetchStockBalances, type StockBalanceRow } from '../inventory/inventoryApi'
-import { fetchOverdueDues, fetchSales, type InstallmentDue, type Sale } from '../sales/salesApi'
+import {
+  fetchCashCollected,
+  fetchOpenBalanceTotal,
+  fetchOverdueDues,
+  fetchSalesDayTotals,
+  fetchVarietyTotals,
+  type InstallmentDue,
+  type SalesDayTotal,
+} from '../sales/salesApi'
 import { fetchFundBalances, type PcfFundBalance } from '../pcf/pcfApi'
 import { fetchFundRequests, type FundRequest, type FundRequestStatus } from '../fund-requests/fundRequestsApi'
-import { supabase } from '../../lib/supabase'
 import { formatPhp } from '../../lib/money'
 import { todayInputValue, toDateInputValue } from '../../lib/dates'
 import type { Branch } from '../../types/database'
@@ -36,13 +43,6 @@ const REQUEST_STATUS: Record<string, { label: string; tone: 'warning' | 'ok' }> 
 }
 
 const STATUS_RANK = { out: 0, low: 1, ok: 2 } as const
-
-interface PaymentRow {
-  amount: number
-  method: string
-  payment_date: string
-  sale: { branch_id: string } | null
-}
 
 function compactPhp(value: number) {
   if (Math.abs(value) >= 1_000_000) {
@@ -73,7 +73,9 @@ export function DashboardPage() {
 
   const [branches, setBranches] = useState<Branch[]>([])
   const [branchId, setBranchId] = useState<string>(canViewAll ? '' : profileBranchId ?? '')
-  const [sales, setSales] = useState<Sale[]>([])
+  const [dayTotals, setDayTotals] = useState<SalesDayTotal[]>([])
+  const [varietyRows, setVarietyRows] = useState<[string, number][]>([])
+  const [receivables, setReceivables] = useState(0)
   const [balances, setBalances] = useState<StockBalanceRow[]>([])
   const [funds, setFunds] = useState<PcfFundBalance[]>([])
   const [fundRequests, setFundRequests] = useState<FundRequest[]>([])
@@ -94,48 +96,41 @@ export function DashboardPage() {
     const yesterdayDate = new Date()
     yesterdayDate.setDate(yesterdayDate.getDate() - 1)
     const yesterday = toDateInputValue(yesterdayDate)
+    const weekStart = new Date()
+    weekStart.setDate(weekStart.getDate() - 6)
+    const since = toDateInputValue(weekStart)
     const branchFilter = branchId || null
 
     async function load() {
       setLoading(true)
       setError('')
       try {
-        const [saleRows, balanceRows, fundRows, requestRows, paymentRes, dueRows] = await Promise.all([
-          salesAccess ? fetchSales(branchFilter) : Promise.resolve([]),
-          stockAccess ? fetchStockBalances(branchFilter) : Promise.resolve([]),
-          pcfAccess ? fetchFundBalances() : Promise.resolve([]),
-          requestsAccess ? fetchFundRequests() : Promise.resolve([]),
-          supabase
-            .from('payments')
-            .select('amount, method, payment_date, sale:sales(branch_id)')
-            .in('payment_date', [today, yesterday])
-            .eq('method', 'cash'),
-          salesAccess ? fetchOverdueDues() : Promise.resolve([]),
-        ])
+        const [dayRows, openBalance, varietyTotalsRows, balanceRows, fundRows, requestRows, cashRows, dueRows] =
+          await Promise.all([
+            salesAccess ? fetchSalesDayTotals(branchFilter, since) : Promise.resolve([]),
+            salesAccess ? fetchOpenBalanceTotal(branchFilter) : Promise.resolve({ total: 0, count: 0 }),
+            salesAccess ? fetchVarietyTotals(branchFilter, since) : Promise.resolve([]),
+            stockAccess ? fetchStockBalances(branchFilter) : Promise.resolve([]),
+            pcfAccess ? fetchFundBalances() : Promise.resolve([]),
+            requestsAccess ? fetchFundRequests() : Promise.resolve([]),
+            salesAccess ? fetchCashCollected(branchFilter, [today, yesterday]) : Promise.resolve([]),
+            salesAccess ? fetchOverdueDues() : Promise.resolve([]),
+          ])
         if (cancelled) return
-
-        if (paymentRes.error) throw paymentRes.error
-        const todayPayments = ((paymentRes.data as unknown as PaymentRow[]) ?? []).filter(
-          (p) => !branchFilter || p.sale?.branch_id === branchFilter,
-        )
 
         const scopedDues = (dueRows as InstallmentDue[]).filter(
           (d) => !branchFilter || d.plan?.sale?.branch_id === branchFilter,
         )
 
-        setSales(saleRows)
+        setDayTotals(dayRows)
+        setVarietyRows(varietyTotalsRows)
+        setReceivables(openBalance.total)
         setBalances(balanceRows)
         setFunds(fundRows)
         setFundRequests(requestRows)
-        setPaymentsToday(
-          todayPayments
-            .filter((p) => p.payment_date === today)
-            .reduce((sum, p) => sum + Number(p.amount), 0),
-        )
+        setPaymentsToday(cashRows.filter((p) => p.payment_date === today).reduce((sum, p) => sum + p.amount, 0))
         setPaymentsYesterday(
-          todayPayments
-            .filter((p) => p.payment_date === yesterday)
-            .reduce((sum, p) => sum + Number(p.amount), 0),
+          cashRows.filter((p) => p.payment_date === yesterday).reduce((sum, p) => sum + p.amount, 0),
         )
         setOverdueCount(scopedDues.length)
       } catch (err) {
@@ -152,23 +147,21 @@ export function DashboardPage() {
   }, [branchId, pcfAccess, requestsAccess, role, salesAccess, stockAccess])
 
   const today = todayInputValue()
-  const todayRows = sales.filter((s) => s.sale_date === today)
-  const todaySales = todayRows.reduce((sum, s) => sum + Number(s.total), 0)
   const yesterdayDate = new Date()
   yesterdayDate.setDate(yesterdayDate.getDate() - 1)
-  const yesterdayRows = sales.filter((s) => s.sale_date === toDateInputValue(yesterdayDate))
-  const yesterdaySales = yesterdayRows.reduce((sum, s) => sum + Number(s.total), 0)
-  const receivables = sales.reduce((sum, s) => sum + Number(s.balance), 0)
+  const yesterday = toDateInputValue(yesterdayDate)
+  const todayRows = dayTotals.filter((row) => row.sale_date === today)
+  const todaySales = todayRows.reduce((sum, row) => sum + row.total, 0)
+  const yesterdaySales = dayTotals
+    .filter((row) => row.sale_date === yesterday)
+    .reduce((sum, row) => sum + row.total, 0)
 
   const branchFunds = branchId ? funds.filter((f) => f.branch_id === branchId) : funds
   const pettyCash = branchFunds.reduce((sum, f) => sum + Number(f.balance), 0)
   const pettyCashLow = branchFunds.some((f) => f.is_low)
 
   const last7 = useMemo(() => {
-    const byDate = new Map<string, number>()
-    for (const sale of sales) {
-      byDate.set(sale.sale_date, (byDate.get(sale.sale_date) ?? 0) + Number(sale.total))
-    }
+    const byDate = new Map(dayTotals.map((row) => [row.sale_date, row.total]))
     return Array.from({ length: 7 }, (_, index) => {
       const offset = 6 - index
       const d = new Date()
@@ -180,21 +173,10 @@ export function DashboardPage() {
         total: byDate.get(key) ?? 0,
       }
     })
-  }, [sales])
+  }, [dayTotals])
   const weekTotal = last7.reduce((sum, day) => sum + day.total, 0)
 
-  const varietyTotals = (() => {
-    const start = last7[0]?.key ?? today
-    const totals = new Map<string, number>()
-    for (const sale of sales) {
-      if (sale.sale_date < start) continue
-      for (const item of sale.items ?? []) {
-        const name = item.sku?.variety?.name ?? 'Other'
-        totals.set(name, (totals.get(name) ?? 0) + Number(item.line_total))
-      }
-    }
-    return [...totals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
-  })()
+  const varietyTotals = varietyRows
   const varietyMax = varietyTotals[0]?.[1] ?? 0
 
   const stockRows = (() => {

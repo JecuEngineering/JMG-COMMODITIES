@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../features/auth/AuthContext'
 import { ROLE_LABELS, groupedNav, navForRole } from '../lib/roles'
 import { useCompanySettings } from '../features/settings/useCompanySettings'
 import { NotificationsBell } from '../features/notifications/NotificationsBell'
+import { SkeletonTable } from '../components/Loading'
 import { Icon } from './Icon'
 import './shell.css'
 
@@ -109,7 +110,15 @@ export function AppShell() {
         </header>
 
         <main className="shell-content">
-          <Outlet />
+          <Suspense
+            fallback={
+              <div className="app-page" aria-busy="true">
+                <SkeletonTable rows={5} cols={5} />
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 

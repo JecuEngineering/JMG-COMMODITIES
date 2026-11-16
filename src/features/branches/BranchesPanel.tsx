@@ -7,6 +7,7 @@ import { Modal } from '../../components/Modal'
 import { Pagination, usePaged } from '../../components/Pagination'
 import { Table } from '../../components/Table'
 import { writeAuditLog } from '../../lib/audit'
+import { invalidateQuery } from '../../lib/queryCache'
 import { canManageSettings } from '../../lib/roles'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthContext'
@@ -234,6 +235,7 @@ export function BranchesPanel() {
       setPinInput('')
       setMapNote(null)
       setShowForm(false)
+      invalidateQuery('ref:branches')
       await load()
       return
     }
@@ -259,6 +261,7 @@ export function BranchesPanel() {
     setMapNote(null)
     setShowForm(false)
     setMessage('Branch added.')
+    invalidateQuery('ref:branches')
     await load()
   }
 
@@ -280,6 +283,7 @@ export function BranchesPanel() {
       newValue: { active: false },
     })
     setMessage(`${branch.name} deactivated.`)
+    invalidateQuery('ref:branches')
     await load()
   }
 
