@@ -8,6 +8,8 @@ import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
 import { Pagination, usePaged } from '../../components/Pagination'
+import { ScopePill } from '../../components/ScopePill'
+import { ScopeSelect } from '../../components/ScopeSelect'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate, formatDateTime, todayInputValue } from '../../lib/dates'
@@ -590,27 +592,30 @@ export function InventoryPage() {
     <div className="app-page stack">
       <div className="page-header">
         <div>
+          <ScopePill
+            label={
+              canAllBranches
+                ? branchFilter
+                  ? branchLabel(branchFilter)
+                  : 'All branches'
+                : branchLabel(profileBranchId ?? '')
+            }
+          />
           <h1>Inventory</h1>
           <p>Stock is the sum of ledger movements — never edited as a raw count.</p>
         </div>
         <div className="inv-toolbar">
           {canAllBranches ? (
-            <SelectInput
-              aria-label="Branch filter"
-              className="inv-branch-pick"
+            <ScopeSelect
+              ariaLabel="Branch filter"
               value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-            >
-              <option value="">All branches</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </SelectInput>
-          ) : (
-            <span className="inv-branch-label">{branchLabel(profileBranchId ?? '')}</span>
-          )}
+              onChange={setBranchFilter}
+              options={[
+                { value: '', label: 'All branches' },
+                ...branches.map((b) => ({ value: b.id, label: b.name })),
+              ]}
+            />
+          ) : null}
           {canCreate ? (
             <div className="inv-actions" ref={actionsRef}>
               <Button

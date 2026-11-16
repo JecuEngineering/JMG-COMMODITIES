@@ -1,27 +1,11 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../features/auth/AuthContext'
-import { ROLE_LABELS, navForRole } from '../lib/roles'
+import { ROLE_LABELS, groupedNav, navForRole } from '../lib/roles'
 import { useCompanySettings } from '../features/settings/useCompanySettings'
 import { NotificationsBell } from '../features/notifications/NotificationsBell'
+import { Icon } from './Icon'
 import './shell.css'
-
-const NAV_ICONS: Record<string, string> = {
-  dashboard: '⊞',
-  sales: '🛒',
-  customers: '🤝',
-  products: '🌾',
-  inventory: '📦',
-  containers: '🚢',
-  pcf: '💰',
-  fund_requests: '📋',
-  reports: '📊',
-  employees: '👥',
-  settings: '⚙️',
-  audit: '🕘',
-  inquiries: '✉️',
-  me: '👤',
-}
 
 export function AppShell() {
   const { user, signOut } = useAuth()
@@ -30,6 +14,9 @@ export function AppShell() {
   const allNav = navForRole(role)
   const desktopNav = allNav.filter((item) => item.id !== 'me')
   const phoneNav = navForRole(role, true)
+  const sidebarGroups = groupedNav(desktopNav)
+  const drawerGroups = groupedNav(allNav)
+  const ungroupedNav = allNav.filter((item) => !item.group)
   const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
@@ -62,17 +49,22 @@ export function AppShell() {
         </div>
 
         <nav className="shell-nav">
-          {desktopNav.map((item) => (
-            <NavLink
-              key={item.id}
-              to={item.path}
-              end={item.path === '/app'}
-              title={item.label}
-              className={({ isActive }) => `shell-nav-link ${isActive ? 'active' : ''}`}
-            >
-              <span className="shell-nav-icon" aria-hidden="true">{NAV_ICONS[item.id] ?? '·'}</span>
-              <span className="shell-nav-label">{item.label}</span>
-            </NavLink>
+          {sidebarGroups.map((group) => (
+            <div className="shell-nav-group" key={group.id}>
+              <p className="shell-nav-group-label">{group.label}</p>
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.id}
+                  to={item.path}
+                  end={item.path === '/app'}
+                  title={item.label}
+                  className={({ isActive }) => `shell-nav-link ${isActive ? 'active' : ''}`}
+                >
+                  <Icon name={item.id} size={18} className="shell-nav-icon" />
+                  <span className="shell-nav-label">{item.label}</span>
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 
@@ -86,7 +78,7 @@ export function AppShell() {
             title="Sign out"
             onClick={() => void signOut()}
           >
-            <span className="shell-signout-icon" aria-hidden="true">⏻</span>
+            <Icon name="power" size={16} className="shell-signout-icon" />
             <span className="shell-signout-label">Sign out</span>
           </button>
         </div>
@@ -111,7 +103,7 @@ export function AppShell() {
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen(true)}
             >
-              ☰
+              <Icon name="menu" size={19} />
             </button>
           </div>
         </header>
@@ -138,19 +130,35 @@ export function AppShell() {
                 aria-label="Close menu"
                 onClick={() => setMenuOpen(false)}
               >
-                ✕
+                <Icon name="close" size={17} />
               </button>
             </div>
             <nav className="shell-mobile-menu-nav">
-              {allNav.map((item) => (
+              {drawerGroups.map((group) => (
+                <div className="shell-nav-group" key={group.id}>
+                  <p className="shell-nav-group-label">{group.label}</p>
+                  {group.items.map((item) => (
+                    <NavLink
+                      key={item.id}
+                      to={item.path}
+                      end={item.path === '/app'}
+                      onClick={() => setMenuOpen(false)}
+                      className={({ isActive }) => `shell-mobile-menu-link ${isActive ? 'active' : ''}`}
+                    >
+                      <Icon name={item.id} size={18} className="shell-nav-icon" />
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
+              ))}
+              {ungroupedNav.map((item) => (
                 <NavLink
                   key={item.id}
                   to={item.path}
-                  end={item.path === '/app'}
                   onClick={() => setMenuOpen(false)}
                   className={({ isActive }) => `shell-mobile-menu-link ${isActive ? 'active' : ''}`}
                 >
-                  <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>{NAV_ICONS[item.id] ?? '·'}</span>
+                  <Icon name={item.id} size={18} className="shell-nav-icon" />
                   {item.label}
                 </NavLink>
               ))}
@@ -174,7 +182,7 @@ export function AppShell() {
             end={item.path === '/app'}
             className={({ isActive }) => `shell-bottom-link ${isActive ? 'active' : ''}`}
           >
-            <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>{NAV_ICONS[item.id] ?? '·'}</span>
+            <Icon name={item.id} size={22} />
             <span>{item.label}</span>
           </NavLink>
         ))}

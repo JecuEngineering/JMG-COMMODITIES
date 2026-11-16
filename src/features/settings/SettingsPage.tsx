@@ -3,6 +3,7 @@ import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Field, TextArea, TextInput } from '../../components/Field'
 import { SkeletonText } from '../../components/Loading'
+import { ScopePill } from '../../components/ScopePill'
 import { useAuth } from '../auth/AuthContext'
 import { writeAuditLog } from '../../lib/audit'
 import { canManageSettings, canViewSettings } from '../../lib/roles'
@@ -136,6 +137,7 @@ export function SettingsPage() {
     <div className="app-page stack">
       <div className="page-header">
         <div>
+          <ScopePill label="Company-wide" />
           <h1>Settings</h1>
           <p>Company details and logo used on login, header, and printed documents.</p>
         </div>

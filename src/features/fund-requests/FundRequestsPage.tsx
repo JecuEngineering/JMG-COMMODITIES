@@ -7,6 +7,7 @@ import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
 import { Pagination, usePaged } from '../../components/Pagination'
+import { ScopePill } from '../../components/ScopePill'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate, todayInputValue } from '../../lib/dates'
@@ -321,6 +322,7 @@ export function FundRequestsPage() {
     <div className="app-page stack">
       <div className="page-header no-print">
         <div>
+          <ScopePill label={canViewAll ? 'All branches' : user!.profile.branch?.name ?? 'Branch'} />
           <h1>Fund Requests</h1>
           <p>Request → BA review → Owner approve → GA release → Liquidation.</p>
         </div>

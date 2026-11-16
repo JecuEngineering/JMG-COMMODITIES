@@ -1,5 +1,86 @@
 # Changelog
 
+## Customers: delete action + columns fixed across pages (2026-11-16)
+
+- **Row actions**: the **Open** button is gone — the row itself already opens the customer detail. **Edit** stays and a danger **Delete** was added (both stop the row click so the detail card does not also open).
+- **Delete** is a soft delete: `deleteCustomerRecord` sets `active = false` and `deleted_at`, then the page writes an `audit_log` entry (`action: delete`, old/new values). A confirmation modal names the customer; when the account still has an open balance the modal shows the amount and disables **Delete customer**, so receivables cannot be hidden by accident. Existing sales, payments and receipts are untouched.
+- **Stable columns**: the customer table is now `table-layout: fixed` (`.ui-table-fixed`) with a `colgroup` (22/15/15/14/14/20 %). Column positions no longer jump when the content of a new page is wider or narrower. `Table` accepts an optional `className`. The fixed table has a 960 px floor so the six columns stay legible on phones (it scrolls horizontally, same as other wide tables).
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass. Headless probe measured identical header x-offsets on pages 1 and 2 at 1280 px and 504 px; the actions cell fits Edit + Delete (190 px content at 1280, 168 px at the 960 px floor). Delete modal checked in both allowed and blocked states; temporary preview deleted. No staff login, so the Supabase write path was not exercised live.
+
+## Customer search rebuilt as a list toolbar (2026-11-16)
+
+- **Why**: the Search input sat directly against the table header, with a form-style label tucked under the card divider, so the filter read as part of the list instead of a control above it.
+- The list now starts with a `.ui-toolbar` row: a 44 px search box with an in-field magnifier icon, the placeholder “Search name, contact, or address”, and a circular × that clears the query once anything is typed. **Export CSV** is height-aligned beside it, and 16 px separates the toolbar from the table header.
+- The icon tints jade while the field is focused; native WebKit search decorations are hidden; under 520 px the search takes the full row and Export CSV wraps beneath it.
+- Searching with no hits now reads `No customers match “…”` instead of “No customers yet.”
+- Added a `search` icon (`Icon.tsx`); the styles (`.ui-toolbar`, `.ui-search`, `.ui-search-icon`, `.ui-search-input`, `.ui-search-clear`) live in `ui.css` and are generic for other list pages. The visible “Search” label was dropped in favour of `aria-label="Search customers"`.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass; rendered at 1280 px and inside a 390 px iframe with an empty and a filled query (temporary preview, deleted).
+
+## Customer list keeps its place when paging (2026-11-16)
+
+- **Why**: clicking a page button at the bottom of the customer list swapped the rows above it, but the viewport stayed on the pagination bar — the new page was off-screen.
+- `usePaged` (`src/components/Pagination.tsx`) accepts an optional `scrollTarget` ref. When the user changes page or rows-per-page and the list header has scrolled above the viewport, it scrolls back to the list after the rows render. No scroll is performed when the list is already visible, and `prefers-reduced-motion` swaps the smooth glide for an instant jump.
+- The target uses the new shared `.ui-scroll-target` (`scroll-margin-top`: 16 px desktop, sticky-header offset + 12 px on phone) so the card title clears the mobile topbar. `Card` now forwards a `ref` (React 19 ref-as-prop) so the Customer list card itself is the anchor.
+- Applied to the Customers list only; other modules can opt in by passing a ref as the third `usePaged` argument.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass. Headless Chrome probe (temporary preview, deleted) confirmed page 2 and rows-per-page 25 both land the list header at 16 px on desktop and 76 px on phone, and that no scroll happens when the list already fits the viewport.
+
+## Customers summary as KPI cards (2026-11-16)
+
+- The plain “Summary” card (a title plus four bare numbers) is now a row of four stat cards matching the Dashboard: **Customers**, **With balance**, **Total receivables** and **Overdue**, each with a lowercase context line (“Records in this view”, “No open balances”, “Open sale balances”, “Nothing overdue”).
+- The **Overdue** card turns amber (fill + border) and reads “Needs follow-up” as soon as the count is above zero; amounts use tabular figures so they align.
+- New shared classes `.ui-stats` / `.ui-stat` (+ `.is-warning`, label/value/sub) in `ui.css`: 4-up on desktop, 2-up under 900 px, 1-up under 480 px. Other modules can reuse them for KPI rows.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass; both zero and non-zero states rendered at 1000 px and inside a 390 px iframe (temporary preview, deleted).
+
+## Customers branch filter moved into the header (2026-11-16)
+
+- **Why**: the all-branches filter was a lone full-width native select inside its own "Branch" card, which pushed the customer list down a screen and looked nothing like the Dashboard/Inventory switchers.
+- **Now**: the card is gone. The `ScopeSelect` pill sits in the Customers header next to **Add customer**, and selecting a branch updates both the glowing scope pill and the list (clearing any open customer detail). Roles fixed to one branch see no switcher, as before.
+- The new-customer modal hint now reads “Saved to the branch selected in the header.”
+- **Verification**: `npx tsc -b --force` passes; header rendered at 1000 px and inside a 390 px iframe (temporary preview, deleted). On phone the switcher spans the width with the action wrapping beneath it.
+
+## Branch pill glow (2026-11-16)
+
+- The scope pill above each page title now breathes: a 3.6 s `ui-scope-glow` animation cycles a soft jade halo (`0 0 20px 4px` at peak), lifts the border to a translucent jade and brightens the fill, with a 1.03 scale — enough to catch the eye on the cream background without behaving like an alert.
+- New tokens `--color-jade-glow`, `--color-jade-glow-soft` and `--color-jade-soft-bright`; the resting state keeps a faint 6 px glow, so `prefers-reduced-motion` users get a static highlighted pill instead of movement.
+
+## Branch switcher redesigned (2026-11-16)
+
+- **Why**: the Dashboard's `All branches` control was a full-height form select with the browser's default arrow, so it read as an empty field competing with the title instead of a deliberate scope switcher.
+- **New `ScopeSelect`** (`src/components/ScopeSelect.tsx`, `.ui-scope-select` in `ui.css`): a white pill at `--control-h` with a jade pin, 15 px semibold label and a custom chevron — the interactive twin of the `ScopePill`. It no longer uses the OS select menu: clicking opens a styled white panel (elevated shadow, 10 px radius) with the branch list, the current option on jade-mist with a checkmark, and arrow-key hover highlighting.
+- **Interaction**: click the pill to open/close; click an option to apply and close; click anywhere outside to dismiss; Escape closes and returns focus to the pill. Keyboard: ↓/↑ open and move, Home/End jump, Enter/Space select, Tab closes. The trigger is a real button with `aria-haspopup`/`aria-expanded`; the panel is a `role="listbox"` with `aria-activedescendant`.
+- **Applied**: Dashboard header and the Inventory header's all-branches filter (replacing `.dash-branch-pick` and `.inv-branch-pick`). Under 720 px the pill and its panel span the content width.
+- Added `chevron-down` and `check` icons to `src/app/Icon.tsx`.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass; rendered open at 1000 px and inside a 390 px iframe. Clicked through in a browser: built-in select click applies the branch and closes, arrows + Enter select, Escape and outside clicks close with focus restored.
+
+## Branch scope pill on every module (2026-11-16)
+
+- **Shared component**: the jade scope chip from the Dashboard is now `src/components/ScopePill.tsx` (styles `.ui-scope` in `ui.css`). It defaults to the signed-in user's branch (`All branches / HQ` when they have none) and accepts a `label` override.
+- **Bigger**: 12 px caps text (was 11 px), 4 px × 12 px padding, 15 px pin icon, jade-mist fill with a `--color-jade-muted` border — noticeable above every page title without competing with it.
+- **Every module**: the pill sits above the `<h1>` on Dashboard, Sales, Inventory, Petty cash, Customers, Reports, Fund Requests, Containers, Products & Prices, Employees & Roles, Settings, Audit log, Website Inquiries, Me and the placeholder screens.
+- **Honest scope**: branch-scoped screens show the branch they are viewing (Sales/PCF/Customers/Reports/Dashboard/Inventory follow their selector); Fund Requests shows `All branches` for Owner/GA; company-wide modules (Employees, Settings, Audit log, Website Inquiries, Products & Prices, Containers) read **Company-wide** instead of implying branch filtering. Redundant branch text was dropped from the Sales and Petty cash subtitles, and Inventory's separate read-only branch label was removed.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass; the pill was rendered at 1000 px and inside a 390 px iframe (temporary preview entry, deleted afterwards). No staff login, so authenticated screens were not clicked through.
+
+## Dashboard rebuilt to the plan mockup (2026-11-16)
+
+- **Layout**: header (`All branches · Today · <date>` + branch selector), four KPI cards, then **Sales by variety** (last 7 days, horizontal bars with the week total) beside **Stock on hand** (sacks per variety with **OK / Low / Out** badges, six rows, **View all**), and finally **Fund requests awaiting action** with a **Total** row and **View all** — matching `PLAN/Dashboard (laptop)@2x.png`.
+- **Fund requests**: rows show purpose, requester, branch (when viewing all branches), amount, a workflow badge — **Waiting on accounting** (submitted), **Waiting on owner** (forwarded), **Ready to release** (approved) — and a **Review/Release** link. The card subtitle lists the stage(s) actually present. Below 720 px the table becomes tappable cards (purpose + amount, requester · branch, status) so nothing is cut off.
+- **Metrics**: petty cash turns amber (border + background + "Replenish soon") when any fund is low; customer balances show the overdue-installment count in amber when there is one; sales/cash cards show yesterday as a compact value. KPI cards only render for roles that can see the data (warehouse no longer sees empty sales figures).
+- **Stock aggregation**: balances are summed per SKU across the selected scope and sorted out → low → OK, so shortages surface first. The dashboard no longer shows the "Needs attention" list (the notification bell covers it) or an upcoming-container item (remove `fetchContainers` from this page); the **Sales, last 7 days** bar chart was replaced by the mockup's variety bars + stock list.
+- **Shared input fix**: `TextInput` / `SelectInput` / `TextArea` merged a passed `className` with `ui-input` instead of replacing it, so the dashboard branch selector and any other customised field keep their styling.
+- **Branch scope chip**: the active branch now sits as a jade pill with a location pin above the **Dashboard** title (`Cebu branch`, or `All branches` / the selected branch for owner and GA), and the subtitle is just `Today · <date>`. Fixed-branch roles no longer rely on the muted subtitle or the sidebar footer to know where they are. New `pin` icon in `src/app/Icon.tsx`.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass. Rendered the new layout at 1280 px and inside a 390 px iframe with representative data (temporary preview entry, deleted afterwards). **Authenticated data was not clicked through** — no staff login is available in the in-app browser.
+
+## UI foundation pass — tokens, type, shared components, grouped sidebar (2026-11-16)
+
+- **Goal**: stop UI drift before per-module polishing. The CSS had reached ~4,900 lines across 9 files with 39 hardcoded hex colours, no spacing/type scale, and card/shadow styles that no longer matched the plan mockups (20 px radii, heavy shadows vs. flat 16 px cards with a 1 px border).
+- **Design tokens** (`src/styles/tokens.css`, rewritten): one source for colour (warm off-white `#f6f3ec`, jade `#1f6b58`, ink ramp with `--color-ink-faint` at 4.8:1 on white), a type scale (`--text-2xs` … `--text-2xl` + fluid `--text-display`), spacing `--space-1…16`, radii (`--radius-card: 16px`, `--radius-control: 10px`, pill), two shadows (card / elevated), focus ring, and layout metrics (`--sidebar-width`, `--header-height`, `--bottom-nav-height`, `--content-max`, `--page-pad`, `--row-y`, `--control-h`, `--touch-min`).
+- **Global typography** (`src/styles/global.css`): body text 15 px on a 1.55 line-height, explicit h1–h4 sizes, tighter display tracking, `::selection` in jade, and `.num`/`.money` with tabular figures so money columns align. Emoji status icons in `.empty-state`, `.error-banner`, `.success-banner` replaced with inline SVG masks.
+- **Shared components** (`src/components/ui.css`): buttons at `--control-h` with 1 px borders and a single primary tint; cards at 16 px radius and token padding; inputs with hover/disabled/focus-ring states and 16 px font on phone (iOS no longer zooms); chips 36/40 px; badges 22 px; tables use one row rhythm (`--row-y 10px` desktop, `--row-y-phone 13px` phone), tabular numbers and a right-aligned `.num` cell; combo/date/pager/modal all tokenised.
+- **Icon system** (`src/app/Icon.tsx`, new): 18 line icons (1.7 stroke) for every nav destination plus bell/close/menu/power, rendered by one `<Icon name size />` component. Emoji icons are gone from the shell and the notifications bell.
+- **Grouped navigation** (`src/lib/roles.ts`, `src/app/AppShell.tsx`, `src/app/shell.css`): nav items carry a `group` (`Overview`, `Sales & Customers`, `Stock`, `Finance`, `Admin`); `groupedNav()` drops empty groups per role. The sidebar, phone drawer and icon rail all render group labels; rail hides labels and separates groups with a divider. Nav links are 40 px at `--radius-control` with jade active icons and a left active bar; sign-out is a bordered row at the sidebar foot.
+- **Notifications** (`NotificationsBell.tsx`): bell/close icons from the new set; panel styling unchanged in behaviour.
+- **Verification**: `npx tsc -b --force` and `npx vite build` pass (CSS 78.35 kB → 14.01 kB gzip). Login and landing pages rendered at 1200 px and 390 px in the dev browser. The authenticated shell (grouped sidebar, metric cards, phone rows) was checked with a throwaway static harness at 1200 px and 390 px using the new tokens/components — it was deleted afterwards. **No staff login is available in the in-app browser, so the real authenticated screens were not clicked through**; this pass is verified visually via the harness only.
+
 ## Tap any table row on a phone to see every field (2026-11-15)
 
 - **Why**: wide tables (Sales ledger, Petty cash, Inventory, …) need sideways scrolling on a phone, so the row you are reading scrolls out of view.

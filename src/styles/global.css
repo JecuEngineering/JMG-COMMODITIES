@@ -16,12 +16,17 @@ body,
 body {
   margin: 0;
   font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
   color: var(--color-ink);
   background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-jade-muted);
+  color: var(--color-jade-dark);
 }
 
 h1,
@@ -30,9 +35,28 @@ h3,
 h4 {
   font-family: var(--font-display);
   font-weight: 600;
-  letter-spacing: -0.025em;
+  letter-spacing: var(--tracking-display);
   margin: 0;
   color: var(--color-ink);
+  line-height: var(--leading-tight);
+}
+
+h2 {
+  font-size: var(--text-xl);
+}
+
+h3 {
+  font-size: var(--text-lg);
+}
+
+h4 {
+  font-size: var(--text-md);
+}
+
+.num,
+.money {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
 
 p {
@@ -82,31 +106,32 @@ img {
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 24px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
 }
 
 .page-header h1 {
-  font-size: 1.75rem;
-  letter-spacing: -0.03em;
+  font-size: var(--text-display);
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-display);
 }
 
 .page-header p {
   color: var(--color-ink-soft);
-  margin-top: 4px;
-  font-size: 0.9rem;
+  margin-top: var(--space-1);
+  font-size: var(--text-base);
 }
 
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .row {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--space-3);
   align-items: center;
 }
 
@@ -131,61 +156,78 @@ img {
 
 /* ── States ───────────────────────────────────────────────── */
 .empty-state {
-  padding: 48px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 44px var(--space-6);
   text-align: center;
-  color: var(--color-ink-faint);
-  border: 1.5px dashed var(--color-border-strong);
+  color: var(--color-ink-soft);
+  border: 1px dashed var(--color-border-strong);
   border-radius: var(--radius-card);
-  background: rgba(255, 255, 255, 0.5);
-  font-size: 0.95rem;
+  background: var(--color-surface);
+  font-size: var(--text-base);
 }
 
 .empty-state::before {
-  content: '📋';
-  display: block;
-  font-size: 2rem;
-  margin-bottom: 10px;
+  content: '';
+  width: 30px;
+  height: 30px;
+  margin-bottom: var(--space-1);
+  background-color: var(--color-ink-faint);
   opacity: 0.6;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='5' width='18' height='14' rx='2'/><path d='M3 10h18'/><path d='M8 15h4'/></svg>") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='5' width='18' height='14' rx='2'/><path d='M3 10h18'/><path d='M8 15h4'/></svg>") center / contain no-repeat;
+}
+
+.error-banner,
+.success-banner {
+  padding: 12px var(--space-4);
+  border-radius: var(--radius-control);
+  font-size: var(--text-base);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .error-banner {
-  padding: 13px 16px;
-  border-radius: var(--radius-control);
   background: var(--color-danger-soft);
   color: var(--color-danger);
   border: 1px solid var(--color-danger-border);
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.error-banner::before {
-  content: '⚠️';
 }
 
 .success-banner {
-  padding: 13px 16px;
-  border-radius: var(--radius-control);
   background: var(--color-ok-soft);
   color: var(--color-ok);
   border: 1px solid var(--color-ok-border);
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+}
+
+.error-banner::before,
+.success-banner::before {
+  content: '';
+  flex: none;
+  width: 18px;
+  height: 18px;
+  background-color: currentColor;
+  -webkit-mask: center / contain no-repeat;
+  mask: center / contain no-repeat;
+}
+
+.error-banner::before {
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M12 8v5'/><path d='M12 16.5h.01'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M12 8v5'/><path d='M12 16.5h.01'/></svg>");
 }
 
 .success-banner::before {
-  content: '✓';
-  font-weight: 700;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='m8.5 12.5 2.5 2.5 4.5-5'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='m8.5 12.5 2.5 2.5 4.5-5'/></svg>");
 }
 
 /* ── Dashboard metric cards ───────────────────────────────── */
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .metric-card {
@@ -193,22 +235,24 @@ img {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
-  padding: 20px;
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  transition: box-shadow 0.2s, transform 0.2s;
+  gap: var(--space-2);
+  transition: box-shadow var(--motion-base) var(--ease-out), transform var(--motion-base) var(--ease-out),
+    border-color var(--motion-base) var(--ease-out);
 }
 
 .metric-card:hover {
+  border-color: var(--color-border-strong);
   box-shadow: var(--shadow-elevated);
   transform: translateY(-1px);
 }
 
 .metric-card-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-control);
   background: var(--color-jade-soft);
   display: flex;
   align-items: center;
@@ -229,24 +273,25 @@ img {
 }
 
 .metric-card-label {
-  font-size: 0.8rem;
+  font-size: var(--text-2xs);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--tracking-caps);
   text-transform: uppercase;
   color: var(--color-ink-faint);
 }
 
 .metric-card-value {
   font-family: var(--font-display);
-  font-size: 1.75rem;
+  font-size: var(--text-2xl);
   font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--color-ink);
-  line-height: 1;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
 }
 
 .metric-card-sub {
-  font-size: 0.8rem;
+  font-size: var(--text-sm);
   color: var(--color-ink-soft);
 }
 

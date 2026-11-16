@@ -20,14 +20,14 @@ export function Field({ label, htmlFor, hint, error, children }: FieldProps) {
   )
 }
 
-export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className="ui-input" {...props} />
+export function TextInput({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  return <input className={`ui-input ${className}`.trim()} {...props} />
 }
 
-export function SelectInput(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className="ui-input" {...props} />
+export function SelectInput({ className = '', ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select className={`ui-input ${className}`.trim()} {...props} />
 }
 
-export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className="ui-input ui-textarea" {...props} />
+export function TextArea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={`ui-input ui-textarea ${className}`.trim()} {...props} />
 }

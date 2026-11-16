@@ -5,6 +5,7 @@ import { Card } from '../../components/Card'
 import { Field, SelectInput, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Pagination, usePaged } from '../../components/Pagination'
+import { ScopePill } from '../../components/ScopePill'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { canViewAuditLog } from '../../lib/roles'
@@ -122,6 +123,7 @@ export function AuditLogPage() {
     <div className="app-page stack" style={{ gap: 20 }}>
       <div className="page-header">
         <div>
+          <ScopePill label="Company-wide" />
           <h1>Audit log</h1>
           <p className="muted">Every recorded action, newest first. Showing the latest 500 entries.</p>
         </div>

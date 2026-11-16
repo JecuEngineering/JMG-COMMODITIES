@@ -8,6 +8,7 @@ import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
 import { Pagination, usePaged } from '../../components/Pagination'
+import { ScopePill } from '../../components/ScopePill'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches, fetchSkus, skuLabel } from '../inventory/inventoryApi'
@@ -431,6 +432,7 @@ export function ContainersPage() {
     <div className="app-page stack">
       <div className="page-header">
         <div>
+          <ScopePill label="Company-wide" />
           <h1>Containers</h1>
           <p>Suppliers, purchases, arrival, landed costs, and receiving into branch stock.</p>
         </div>

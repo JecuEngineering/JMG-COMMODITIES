@@ -33,7 +33,26 @@ export interface NavItem {
   label: string
   path: string
   roles: AppRole[]
+  group?: NavGroupId
   phoneTab?: boolean
+}
+
+export type NavGroupId = 'overview' | 'sales' | 'stock' | 'finance' | 'admin'
+
+export const NAV_GROUPS: { id: NavGroupId; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'sales', label: 'Sales & Customers' },
+  { id: 'stock', label: 'Stock' },
+  { id: 'finance', label: 'Finance' },
+  { id: 'admin', label: 'Admin' },
+]
+
+/** Sidebar groups in display order; empty groups (no permission) are dropped. */
+export function groupedNav(items: NavItem[]): { id: NavGroupId; label: string; items: NavItem[] }[] {
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    items: items.filter((item) => item.group === group.id),
+  })).filter((group) => group.items.length > 0)
 }
 
 /** Menu visibility from the Phase 1 permission matrix (View or higher). */
@@ -43,12 +62,14 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Dashboard',
     path: '/app',
     roles: ['owner', 'general_accountant', 'branch_accountant', 'cashier', 'warehouse', 'system_admin'],
+    group: 'overview',
   },
   {
     id: 'sales',
     label: 'Sales',
     path: '/app/sales',
     roles: ['owner', 'general_accountant', 'branch_accountant', 'cashier'],
+    group: 'sales',
     phoneTab: true,
   },
   {
@@ -56,18 +77,21 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Customers',
     path: '/app/customers',
     roles: ['owner', 'general_accountant', 'branch_accountant', 'cashier'],
+    group: 'sales',
   },
   {
     id: 'products',
     label: 'Products & Prices',
     path: '/app/products',
     roles: ['owner', 'general_accountant', 'branch_accountant', 'cashier', 'warehouse', 'system_admin'],
+    group: 'stock',
   },
   {
     id: 'inventory',
     label: 'Inventory',
     path: '/app/inventory',
     roles: ['owner', 'general_accountant', 'branch_accountant', 'cashier', 'warehouse'],
+    group: 'stock',
     phoneTab: true,
   },
   {
@@ -75,18 +99,21 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Containers',
     path: '/app/containers',
     roles: ['owner', 'general_accountant', 'branch_accountant', 'warehouse'],
+    group: 'stock',
   },
   {
     id: 'pcf',
     label: 'Petty Cash',
     path: '/app/pcf',
     roles: ['owner', 'general_accountant', 'branch_accountant'],
+    group: 'finance',
   },
   {
     id: 'fund_requests',
     label: 'Fund Requests',
     path: '/app/fund-requests',
     roles: ['owner', 'general_accountant', 'branch_accountant', 'warehouse', 'employee'],
+    group: 'finance',
     phoneTab: true,
   },
   {
@@ -94,30 +121,35 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Reports',
     path: '/app/reports',
     roles: ['owner', 'general_accountant', 'branch_accountant', 'warehouse'],
+    group: 'finance',
   },
   {
     id: 'employees',
     label: 'Employees & Roles',
     path: '/app/employees',
     roles: ['owner', 'general_accountant', 'system_admin'],
+    group: 'admin',
   },
   {
     id: 'settings',
     label: 'Settings',
     path: '/app/settings',
     roles: ['owner', 'general_accountant', 'system_admin'],
+    group: 'admin',
   },
   {
     id: 'audit',
     label: 'Audit Log',
     path: '/app/audit',
     roles: ['owner', 'general_accountant'],
+    group: 'admin',
   },
   {
     id: 'inquiries',
     label: 'Inquiries',
     path: '/app/inquiries',
     roles: ['owner', 'general_accountant', 'branch_accountant', 'system_admin'],
+    group: 'admin',
   },
   {
     id: 'me',

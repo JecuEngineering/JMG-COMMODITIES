@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import './ui.css'
 
 export const PAGE_SIZES = [10, 25, 50] as const
 
-export function usePaged<T>(items: T[], initialSize = 10) {
+export function usePaged<T>(items: T[], initialSize = 10, scrollTarget?: RefObject<HTMLElement | null>) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState<number>(initialSize)
+  const scrollIntentRef = useRef(false)
 
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize))
   const current = Math.min(page, pageCount)
@@ -14,6 +15,15 @@ export function usePaged<T>(items: T[], initialSize = 10) {
     if (page !== current) setPage(current)
   }, [page, current])
 
+  useEffect(() => {
+    if (!scrollTarget || !scrollIntentRef.current) return
+    scrollIntentRef.current = false
+    const el = scrollTarget.current
+    if (!el || el.getBoundingClientRect().top >= 0) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+  }, [current, pageSize, scrollTarget])
+
   const pageItems = useMemo(
     () => items.slice((current - 1) * pageSize, current * pageSize),
     [items, current, pageSize],
@@ -21,9 +31,13 @@ export function usePaged<T>(items: T[], initialSize = 10) {
 
   return {
     page: current,
-    setPage,
+    setPage: (next: number) => {
+      if (next !== current) scrollIntentRef.current = true
+      setPage(next)
+    },
     pageSize,
     setPageSize: (size: number) => {
+      if (size !== pageSize) scrollIntentRef.current = true
       setPageSize(size)
       setPage(1)
     },

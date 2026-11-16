@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import './ui.css'
 
 interface CardProps {
@@ -7,11 +7,12 @@ interface CardProps {
   title?: string
   subtitle?: string
   action?: ReactNode
+  ref?: Ref<HTMLElement>
 }
 
-export function Card({ children, className = '', title, subtitle, action }: CardProps) {
+export function Card({ children, className = '', title, subtitle, action, ref }: CardProps) {
   return (
-    <section className={`ui-card ${className}`.trim()}>
+    <section ref={ref} className={`ui-card ${className}`.trim()}>
       {(title || action) && (
         <header className="ui-card-header">
           <div>

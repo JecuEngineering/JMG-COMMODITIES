@@ -1,4 +1,5 @@
 import { Card } from '../components/Card'
+import { ScopePill } from '../components/ScopePill'
 
 interface PlaceholderPageProps {
   title: string
@@ -11,6 +12,7 @@ export function PlaceholderPage({ title, phase, description }: PlaceholderPagePr
     <div className="app-page stack">
       <div className="page-header">
         <div>
+          <ScopePill />
           <h1>{title}</h1>
           <p>Coming in {phase}</p>
         </div>

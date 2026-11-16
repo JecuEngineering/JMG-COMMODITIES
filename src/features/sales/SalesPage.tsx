@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { ScopePill } from '../../components/ScopePill'
 import { Chip, ChipRow } from '../../components/Chip'
 import { Combobox } from '../../components/Combobox'
 import { DateInput } from '../../components/DateInput'
@@ -703,11 +704,9 @@ export function SalesPage() {
     <div className="app-page stack sales-page">
       <div className="page-header">
         <div>
+          <ScopePill label={branches.find((b) => b.id === branchId)?.name ?? user!.profile.branch?.name ?? 'Branch'} />
           <h1>Sales</h1>
-          <p>
-            {branches.find((b) => b.id === branchId)?.name ?? 'Branch'} · new sales, history, installments
-            and shifts
-          </p>
+          <p>New sales, history, installments and shifts</p>
         </div>
         {canCreate ? (
           <div className="row" style={{ gap: 8 }}>
