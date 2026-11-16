@@ -339,6 +339,8 @@ export function SalesPage() {
   async function onSaveSale(event: FormEvent) {
     event.preventDefault()
     if (!canCreate || !selectedSku || !customerId) return
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
+    const printDr = submitter?.value === 'save-print'
     setError(null)
     setMessage(null)
     const qty = Number(sacks)
@@ -411,10 +413,16 @@ export function SalesPage() {
             : undefined,
       })
       const sale = await fetchSale(id)
-      setReceiptSale(sale)
-      setMessage(`Sale saved · DR ${sale?.dr_number ?? ''}. Stock deducted.`)
+      if (printDr) {
+        setReceiptSale(sale)
+        setTab('receipt')
+      }
+      setMessage(
+        printDr
+          ? `Sale saved · DR ${sale?.dr_number ?? ''}. Stock deducted.`
+          : `Sale saved · DR ${sale?.dr_number ?? ''}. Print it later from the DR button in Sales history.`,
+      )
       setNewSaleOpen(false)
-      setTab('receipt')
       setSacks('20')
       setOrNumber('')
       setDrNumber('')
@@ -742,8 +750,17 @@ export function SalesPage() {
             <Button variant="secondary" onClick={() => setNewSaleOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" form="new-sale-form" disabled={!selectedSku || !customerId}>
+            <Button
+              type="submit"
+              variant="secondary"
+              form="new-sale-form"
+              value="save-print"
+              disabled={!selectedSku || !customerId}
+            >
               Save sale & print DR
+            </Button>
+            <Button type="submit" form="new-sale-form" disabled={!selectedSku || !customerId}>
+              Save sale
             </Button>
           </>
         }
@@ -1080,7 +1097,7 @@ export function SalesPage() {
                                   setTab('receipt')
                                 }}
                               >
-                                DR
+                                Print DR
                               </Button>
                             ) : (
                               ''
