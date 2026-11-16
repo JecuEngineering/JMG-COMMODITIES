@@ -15,6 +15,7 @@ import { useAuth } from '../auth/AuthContext'
 import { formatDate, todayInputValue } from '../../lib/dates'
 import { downloadCsv } from '../../lib/export'
 import { formatPhp, parseMoneyInput } from '../../lib/money'
+import { invalidateQuery } from '../../lib/queryCache'
 import { canManagePrices, canManageProducts, canViewProducts } from '../../lib/roles'
 import { supabase } from '../../lib/supabase'
 import type { Price, SackSize, Sku, Variety, VarietyOrigin } from '../../types/database'
@@ -182,6 +183,7 @@ export function ProductsPage() {
     setVarietyName('')
     setVarietyOpen(false)
     setMessage(`Variety “${data.name}” added.`)
+    invalidateQuery('ref:skus')
     await load()
   }
 
@@ -203,6 +205,7 @@ export function ProductsPage() {
     setSkuBarcode('')
     setSkuOpen(false)
     setMessage(`Rice variety ${skuSize}kg created.`)
+    invalidateQuery('ref:skus')
     await load()
   }
 
@@ -251,6 +254,7 @@ export function ProductsPage() {
       return
     }
     setMessage(`${variety.name} deactivated.`)
+    invalidateQuery('ref:skus')
     await load()
   }
 

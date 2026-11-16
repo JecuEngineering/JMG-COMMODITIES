@@ -261,6 +261,11 @@ export function InventoryPage() {
   const balancePager = usePaged(filteredBalances, 25)
   const movementPager = usePaged(cardRunning, 25)
   const adjustmentPager = usePaged(adjustments, 10)
+  const stockListRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    stockListRef.current?.scrollTo({ top: 0 })
+  }, [balancePager.page, balancePager.pageSize, filteredBalances])
 
   async function loadCard() {
     if (!cardBranch || !cardSku) return
@@ -763,56 +768,64 @@ export function InventoryPage() {
               {filteredBalances.length === 0 ? (
                 <div className="empty-state">No stock lines match these filters.</div>
               ) : (
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>Variety</th>
-                      <th>Size</th>
-                      <th>On hand</th>
-                      <th>Weight</th>
-                      <th>Reorder at</th>
-                      <th>Status</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {balancePager.pageItems.map((row) => (
-                      <tr key={`${row.branch_id}-${row.sku_id}`}>
-                        <td>
-                          <div className="inv-cell-primary">{row.variety_name}</div>
-                          <div className="faint">
-                            {row.barcode ?? '—'}
-                            {canAllBranches && !branchFilter ? ` · ${row.branch_name}` : ''}
-                          </div>
-                        </td>
-                        <td>{row.sack_size}kg</td>
-                        <td>{fmtQty(row.on_hand)}</td>
-                        <td>{fmtQty(row.on_hand * row.sack_size)} kg</td>
-                        <td>{row.reorder_level}</td>
-                        <td>
-                          {row.on_hand <= 0 ? (
-                            <Badge tone="danger">Out</Badge>
-                          ) : row.is_low ? (
-                            <Badge tone="warning">Low</Badge>
-                          ) : (
-                            <Badge>In stock</Badge>
-                          )}
-                        </td>
-                        <td className="inv-cell-actions">
-                          <Button
-                            variant="ghost"
-                            aria-label={`Actions for ${row.variety_name} ${row.sack_size}kg${
-                              canAllBranches && !branchFilter ? ` at ${row.branch_name}` : ''
-                            }`}
-                            onClick={() => setRowAction(row)}
-                          >
-                            ⋯
-                          </Button>
-                        </td>
+                <div
+                  className="inv-stock-list"
+                  ref={stockListRef}
+                  role="region"
+                  aria-label="Inventory stock list"
+                  tabIndex={0}
+                >
+                  <Table>
+                    <thead>
+                      <tr>
+                        <th>Variety</th>
+                        <th>Size</th>
+                        <th>On hand</th>
+                        <th>Weight</th>
+                        <th>Reorder at</th>
+                        <th>Status</th>
+                        <th />
                       </tr>
-                    ))}
-                  </tbody>
-                </Table>
+                    </thead>
+                    <tbody>
+                      {balancePager.pageItems.map((row) => (
+                        <tr key={`${row.branch_id}-${row.sku_id}`}>
+                          <td>
+                            <div className="inv-cell-primary">{row.variety_name}</div>
+                            <div className="faint">
+                              {row.barcode ?? '—'}
+                              {canAllBranches && !branchFilter ? ` · ${row.branch_name}` : ''}
+                            </div>
+                          </td>
+                          <td>{row.sack_size}kg</td>
+                          <td>{fmtQty(row.on_hand)}</td>
+                          <td>{fmtQty(row.on_hand * row.sack_size)} kg</td>
+                          <td>{row.reorder_level}</td>
+                          <td>
+                            {row.on_hand <= 0 ? (
+                              <Badge tone="danger">Out</Badge>
+                            ) : row.is_low ? (
+                              <Badge tone="warning">Low</Badge>
+                            ) : (
+                              <Badge>In stock</Badge>
+                            )}
+                          </td>
+                          <td className="inv-cell-actions">
+                            <Button
+                              variant="ghost"
+                              aria-label={`Actions for ${row.variety_name} ${row.sack_size}kg${
+                                canAllBranches && !branchFilter ? ` at ${row.branch_name}` : ''
+                              }`}
+                              onClick={() => setRowAction(row)}
+                            >
+                              ⋯
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                </div>
               )}
 
               <Pagination
