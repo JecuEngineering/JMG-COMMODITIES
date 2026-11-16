@@ -120,25 +120,32 @@
 /* ── Sales-In ledger history ──────────────────────────────── */
 .sales-ledger .ui-table th,
 .sales-ledger .ui-table td {
-  white-space: nowrap;
   font-size: 0.82rem;
-  padding-left: 10px;
-  padding-right: 10px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* Text columns wrap so the ledger fits the card instead of scrolling;
+   dates, numbers, payment tags and the print action stay on one line. */
+.sales-ledger .ui-table td {
+  white-space: normal;
+}
+
+.sales-ledger .ui-table td.num,
+.sales-ledger .ui-table td:first-child,
+.sales-ledger .ui-table td:nth-child(2),
+.sales-ledger .ui-table td:last-child {
+  white-space: nowrap;
 }
 
 .sales-ledger .ui-table th:first-child,
 .sales-ledger .ui-table td:first-child {
-  padding-left: 16px;
+  padding-left: 14px;
 }
 
 .sales-ledger .ui-table th:last-child,
 .sales-ledger .ui-table td:last-child {
-  padding-right: 16px;
-}
-
-.sales-ledger .ui-table td:nth-child(4) {
-  white-space: normal;
-  min-width: 170px;
+  padding-right: 14px;
 }
 
 .sales-ledger .ui-table .num {
@@ -146,8 +153,38 @@
   font-variant-numeric: tabular-nums;
 }
 
-.sales-ledger .ui-table .center {
-  text-align: center;
+/* One compact column replaces the three payment ✓ columns. */
+.ledger-pay {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ledger-pay-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-2xs);
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+  background: var(--color-neutral-soft);
+  color: var(--color-ink-soft);
+}
+
+.ledger-pay-tag.is-check {
+  background: var(--color-jade-soft);
+  color: var(--color-jade-dark);
+}
+
+.ledger-pay-tag.is-cash {
+  background: var(--color-gold-soft);
+  color: var(--color-warning);
+}
+
+.ledger-pay-tag.is-gcash {
+  background: var(--color-info-soft);
+  color: var(--color-info);
 }
 
 .sales-ledger .ui-table tr.ledger-start td {
@@ -214,7 +251,8 @@
   color: var(--color-ink);
 }
 
-.sales-money-main .sales-money-card strong {
+.sales-money-main .sales-money-card strong,
+.sales-money-pay .sales-money-card strong {
   font-size: 1.4rem;
 }
 
@@ -292,7 +330,8 @@
     padding: 10px 14px;
   }
 
-  .sales-money-main .sales-money-card strong {
+  .sales-money-main .sales-money-card strong,
+  .sales-money-pay .sales-money-card strong {
     font-size: 1.2rem;
   }
 }

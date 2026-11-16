@@ -157,7 +157,8 @@
   letter-spacing: 0;
 }
 
-.ui-field:has(:required) > label::after {
+.ui-field:has(:required) > label::after,
+.ui-field.is-required > label::after {
   content: ' *';
   color: var(--color-danger);
 }
@@ -637,6 +638,12 @@
   min-width: 960px;
 }
 
+/* For small tables inside modals/cards: let columns shrink to the container
+   instead of forcing the 600px floor and a horizontal scrollbar. */
+.ui-table-fluid {
+  min-width: 0;
+}
+
 .ui-table th {
   padding: 10px var(--row-x);
   text-align: left;
@@ -877,6 +884,12 @@
   border-radius: var(--radius-control);
   box-shadow: var(--shadow-elevated);
   animation: ui-pop 140ms var(--ease-out) both;
+}
+
+/* Portal variant: fixed to the viewport so modal bodies cannot clip it. */
+.ui-combo-list-portal {
+  position: fixed;
+  z-index: 450;
 }
 
 .ui-combo-option {

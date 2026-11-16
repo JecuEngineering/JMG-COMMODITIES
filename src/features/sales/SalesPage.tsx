@@ -1048,7 +1048,7 @@ export function SalesPage() {
               <div className="empty-state">No sales for this filter.</div>
             ) : (
               <div className="sales-ledger">
-                <Table>
+                <Table className="ui-table-fluid">
                   <thead>
                     <tr>
                       <th>Date</th>
@@ -1058,9 +1058,7 @@ export function SalesPage() {
                       <th className="num">Bags</th>
                       <th className="num">Price</th>
                       <th className="num">Amount</th>
-                      <th className="center">Cheque</th>
-                      <th className="center">Cash</th>
-                      <th className="center">GCash</th>
+                      <th>Paid via</th>
                       <th />
                     </tr>
                   </thead>
@@ -1084,9 +1082,20 @@ export function SalesPage() {
                           <td className="num">{item ? formatQty(Number(item.sacks)) : ''}</td>
                           <td className="num">{item ? formatPhp(item.price_per_sack) : ''}</td>
                           <td className="num">{item ? formatPhp(item.line_total) : ''}</td>
-                          <td className="center">{index === 0 && pay.check ? '✓' : ''}</td>
-                          <td className="center">{index === 0 && pay.cash ? '✓' : ''}</td>
-                          <td className="center">{index === 0 && pay.gcash ? '✓' : ''}</td>
+                          <td>
+                            {index === 0 ? (
+                              <div className="ledger-pay">
+                                {pay.check ? <span className="ledger-pay-tag is-check">Cheque</span> : null}
+                                {pay.cash ? <span className="ledger-pay-tag is-cash">Cash</span> : null}
+                                {pay.gcash ? <span className="ledger-pay-tag is-gcash">GCash</span> : null}
+                                {!pay.check && !pay.cash && !pay.gcash ? (
+                                  <span className="muted">—</span>
+                                ) : null}
+                              </div>
+                            ) : (
+                              ''
+                            )}
+                          </td>
                           <td>
                             {index === 0 ? (
                               <Button
@@ -1118,7 +1127,7 @@ export function SalesPage() {
                       <td className="num">
                         <strong>{formatPhp(historyTotals.gross)}</strong>
                       </td>
-                      <td colSpan={4} />
+                      <td colSpan={2} />
                     </tr>
                   </tfoot>
                 </Table>

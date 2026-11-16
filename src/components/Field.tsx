@@ -6,12 +6,13 @@ interface FieldProps {
   htmlFor: string
   hint?: string
   error?: string
+  required?: boolean
   children: ReactNode
 }
 
-export function Field({ label, htmlFor, hint, error, children }: FieldProps) {
+export function Field({ label, htmlFor, hint, error, required = false, children }: FieldProps) {
   return (
-    <div className="ui-field">
+    <div className={`ui-field${required ? ' is-required' : ''}`}>
       <label htmlFor={htmlFor}>{label}</label>
       {children}
       {hint && !error ? <span className="ui-field-hint">{hint}</span> : null}

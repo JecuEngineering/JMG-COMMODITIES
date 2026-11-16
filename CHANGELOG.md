@@ -1,5 +1,53 @@
 # Changelog
 
+## Sales summary: payment figures sized like the top row (2026-11-16)
+
+- The Cash / GCash / Check totals rendered at 1.15rem while Gross / Collected / Balance were 1.4rem, so the payment row looked undersized. Both rows now use 1.4rem (22.4 px); under 720 px both rows use 1.2rem, where cards switch to a label/value row.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass. Computed sizes matched (22.4 px / 22.4 px) with no overflow at 1288 and 960 px using the real figures (e.g. ₱29,215,825.00 cash), and a 390 px iframe showed both rows at 1.2rem. Temporary preview deleted.
+
+## Sales ledger fits the card, no scrollbar (2026-11-16)
+
+- The Sales-In ledger packed 11 columns and forced every cell to one line, so its minimum width (~1055 px) beat the card (~1092 px only on wide screens) and a horizontal scrollbar sat under the TOTAL row at common laptop widths.
+- The three tick columns (Cheque / Cash / GCash) are now one **Paid via** column with compact coloured pills — jade for Cheque, gold for Cash, blue for GCash. Payments belong to the sale, so the pills appear on the sale's first line only; a sale with no payment shows “—”.
+- Description and Name may wrap; dates, invoice numbers, quantities, amounts and **Print DR** stay on one line. The 170 px description floor and the blanket `white-space: nowrap` are gone, and cell padding dropped from 10 to 8 px (14 px on the outer edges). The table keeps `.ui-table-fluid`.
+- **Measured**: minimum table width fell from 1055 px to 889 px; probes show `clientWidth === scrollWidth` at 1024, 1040, 1100, 1180 and 1288 px windows — no scrollbar. Below ~1000 px the wrapper scrolls horizontally as before, which is intentional for very narrow windows.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass. Screenshot at 1288 px shows wrapped descriptions, left-aligned pills, valid totals (53,921 bags · ₱56,459,750.00) and the TOTAL row aligned; a 390 px iframe keeps the usual scrollable table (row tap still opens details). Temporary preview deleted; live data not exercised — needs a staff login.
+
+## Price history modal fits its width (2026-11-16)
+
+- The history table carried the shared `.ui-table` floor of 600 px while the `md` modal body gives 596 px, so a horizontal scrollbar appeared under four short columns for a 4 px overflow. New shared `.ui-table-fluid` (`min-width: 0`) lets small tables shrink to their container; the price-history table uses it and the modal now measures 596 px of table in 596 px of body — no scrollbar.
+- Other tables keep the 600 px floor (and `.ui-table-fixed` keeps 960 px) so wide lists still scroll rather than squeeze. Phone still shows the four columns in a horizontally swipeable table, as with other wide tables.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass. Headless probe confirmed `clientWidth === scrollWidth === 596`; screenshot at 1280 px shows no scrollbar, and a 390 px iframe keeps the standard scrollable table. Preview deleted.
+
+## Price history opens in a modal (2026-11-16)
+
+- **View** in the Price list no longer expands a history section under the table (which pushed the pagination and the rest of the page around). It now opens a **Price history** modal for that row, titled with the variety and sack (`Jasmine · 25kg`), showing effective date, price, who set it, and when it was recorded, with a Close button.
+- The modal reuses the existing `Modal` + `Table`; the history query (`priceHistory`) and `historySkuId` state are unchanged, and saving a new price still opens that SKU's history so the new row is visible immediately.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass. Temporary preview (deleted) rendered the modal at 1280 px and inside a 390 px iframe; the four columns scroll horizontally on phone like other wide tables. Live data not exercised — needs a staff login.
+
+## Set price: auto-fill the current price (2026-11-16)
+
+- After a weight and brand are chosen, **Price per sack (₱)** fills itself with that SKU's current price for the selected effective date (via the existing `currentPrice` lookup), formatted to two decimals. The field stays editable so the new price can be typed over it.
+- A hint below the field says where the number came from: `Current price ₱1,450.00 · effective Nov 13, 2026`. When the brand has no price on file, the field clears and the hint reads “No price on file for this brand and weight yet.”
+- Switching weight, brand or effective date re-checks the price list; when the applicable price row is unchanged, a price the user already edited is left alone.
+- The price/effective fields were sitting in an unstyled wrapper with no gap; it now uses `stack` so the hint and the date field are spaced like the rest of the form.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass. Temporary preview (deleted) selected 25 kg → Jasmine and confirmed `1450.00` in the field with the effective-date hint. Live Supabase insert not exercised — needs a staff login.
+
+## Set price: weight chips + searchable brand (2026-11-16)
+
+- **Sack weight** in the *Set new price* modal is now a row of chips (`5 kg` / `25 kg` / `50 kg`, only weights that have varieties) built from the shared `Chip`/`ChipRow`, so the weight is one tap instead of a select.
+- **Brand** is now a searchable `Combobox` (the same control as the customer field on New Sale): type a few letters and the list filters immediately. Labels stay brand-only, the control is disabled (“Choose weight first”) until a weight is tapped, and picking a different weight clears the brand.
+- Submitting without a weight/brand now shows “Choose a sack weight, then a brand.” instead of failing silently. `Field` gained an optional `required` prop (`.ui-field.is-required`) to keep the red asterisk on fields without a native required control.
+- **Combobox fix**: its list is now portalled to `document.body` with fixed positioning (`.ui-combo-list-portal`, z-index 450). Inside a modal the old absolutely-positioned list was clipped by the scrolling modal body — the price dropdown was cut off under the footer. It measures the input, caps its height to the viewport and flips above the field when there is not enough room below. This also benefits the New Sale customer combobox.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass. Probe confirmed the 25 kg chip becomes active and typing “ja” filters the brand list to Japonica / Jasmine / Kasikas Jasmine. Screenshots at 1280 px (list overlays the modal cleanly) and inside a 390 px iframe (list flips upward, chips stay on one row). Temporary preview deleted; live insert not exercised — needs a staff login.
+
+## Set price: pick sack weight, then brand (2026-11-16)
+
+- The **Rice variety** dropdown in the *Set new price* modal is split into two steps: **Sack weight** (`5 kg` / `25 kg` / `50 kg`, limited to weights that have varieties) and then **Brand**. The brand select stays disabled and reads “Choose weight first” until a weight is picked.
+- Brand options are the variety name only — the weight is no longer repeated beside it, because the weight is already the first choice. Changing the weight clears the chosen brand, since the brands list changes with it.
+- The saved value is still the SKU id, so `prices` rows, history and “old sales keep their old price” behave exactly as before.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass. Temporary preview (deleted) confirmed the 25 kg selection enables Brand with a kg-free, name-sorted list, and screenshots at 1280 px and inside a 390 px iframe show both selects full width. Live Supabase insert not exercised — needs a staff login.
+
 ## Customers row actions as icons + Actions column header (2026-11-16)
 
 - **Edit** and **Delete** are now icon-only buttons (pencil and trash, new `edit` / `trash` icons in `Icon.tsx`) instead of text buttons, and the action column finally has a header: **Actions**.
