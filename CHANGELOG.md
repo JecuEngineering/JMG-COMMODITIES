@@ -1,5 +1,12 @@
 # Changelog
 
+## Customers row actions as icons + Actions column header (2026-11-16)
+
+- **Edit** and **Delete** are now icon-only buttons (pencil and trash, new `edit` / `trash` icons in `Icon.tsx`) instead of text buttons, and the action column finally has a header: **Actions**.
+- New shared `.ui-icon-btn` in `ui.css`: 36 px square on desktop, 48 px (`--touch-min`) on phone, 8 px radius. It is applied on top of the existing button variants, so the pencil stays secondary and the trash stays danger red. Each button keeps `aria-label="Edit <name>"` / `aria-label="Delete <name>"`, a `title` hover hint, and `event.stopPropagation()` so the row detail does not open.
+- Column split changed to 25/17/14/14/15/15 % (was 22/15/15/14/14/20) — the old 20 % Actions column was oversized for two icons, and the reclaimed width goes to Name and Contact.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass. Headless probe showed identical header x-offsets on pages 1 and 2 at 1280 px (85/358/544/697/849/1013) and 504 px; the actions cell fits both buttons without scrolling (136 px client at 1280, 120 px at the 960 px floor). Desktop screenshot reviewed; narrow screenshot confirms the table scrolls as before. Temporary preview deleted. No staff login, so live data was not exercised.
+
 ## Customers: delete action + columns fixed across pages (2026-11-16)
 
 - **Row actions**: the **Open** button is gone — the row itself already opens the customer detail. **Edit** stays and a danger **Delete** was added (both stop the row click so the detail card does not also open).
