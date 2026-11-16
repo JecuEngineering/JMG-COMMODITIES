@@ -6,6 +6,7 @@ import { Field, SelectInput, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
 import { Pagination, usePaged } from '../../components/Pagination'
+import { ScopePill } from '../../components/ScopePill'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { writeAuditLog } from '../../lib/audit'
@@ -292,6 +293,7 @@ export function EmployeesPage() {
     <div className="app-page stack">
       <div className="page-header">
         <div>
+          <ScopePill label="Company-wide" />
           <h1>Employees & Roles</h1>
           <p>
             Owner, General Accountant and System Admin can edit profiles. Passwords and login emails are

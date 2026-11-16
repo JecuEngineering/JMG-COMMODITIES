@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { Icon } from '../../app/Icon'
 import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
@@ -6,9 +7,12 @@ import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
 import { Pagination, usePaged } from '../../components/Pagination'
+import { ScopePill } from '../../components/ScopePill'
+import { ScopeSelect } from '../../components/ScopeSelect'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches } from '../inventory/inventoryApi'
+import { writeAuditLog } from '../../lib/audit'
 import { formatDate } from '../../lib/dates'
 import { downloadCsv } from '../../lib/export'
 import { formatPhp } from '../../lib/money'
@@ -16,6 +20,7 @@ import { canManageCustomers, canViewAllBranchesSales, canViewCustomers } from '.
 import type { Branch } from '../../types/database'
 import {
   createCustomerRecord,
+  deleteCustomerRecord,
   fetchCustomerAccounts,
   updateCustomerRecord,
   type CustomerAccount,
@@ -51,7 +56,10 @@ export function CustomersPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<CustomerForm>(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState<CustomerAccount | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const loadedRef = useRef(false)
+  const listTopRef = useRef<HTMLElement>(null)
 
   const load = useCallback(async () => {
     if (!canView) return
@@ -100,7 +108,7 @@ export function CustomersPage() {
     [accounts],
   )
 
-  const customerPager = usePaged(filtered, 10)
+  const customerPager = usePaged(filtered, 10, listTopRef)
 
   if (!canView) {
     return (
@@ -136,6 +144,33 @@ export function CustomersPage() {
     setShowForm(true)
     setMessage(null)
     setError(null)
+  }
+
+  async function confirmDelete() {
+    if (!canManage || !deletingAccount || deletingAccount.balance > 0) return
+    const account = deletingAccount
+    setDeleteBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const deletedAt = await deleteCustomerRecord(account.customer.id)
+      await writeAuditLog({
+        action: 'delete',
+        tableName: 'customers',
+        recordId: account.customer.id,
+        oldValue: { name: account.customer.name, active: account.customer.active },
+        newValue: { active: false, deleted_at: deletedAt },
+      })
+      if (selectedId === account.customer.id) setSelectedId(null)
+      setMessage(`${account.customer.name} deleted.`)
+      setDeletingAccount(null)
+      await load()
+    } catch (e) {
+      setDeletingAccount(null)
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDeleteBusy(false)
+    }
   }
 
   async function onSubmit(event: FormEvent) {
@@ -217,68 +252,71 @@ export function CustomersPage() {
     <div className="app-page stack">
       <div className="page-header">
         <div>
+          <ScopePill
+            label={
+              canViewAll
+                ? branches.find((b) => b.id === branchId)?.name ?? 'All branches'
+                : user!.profile.branch?.name ?? 'Branch'
+            }
+          />
           <h1>Customers</h1>
           <p>Customer records, installment balances, and open delivery receipts.</p>
         </div>
-        {canManage ? (
-          <Button
-            onClick={() => {
-              setSelectedId(null)
-              startCreate()
-            }}
-          >
-            Add customer
-          </Button>
-        ) : null}
+        <div className="row" style={{ alignItems: 'center' }}>
+          {canViewAll ? (
+            <ScopeSelect
+              value={branchId}
+              onChange={(next) => {
+                setBranchId(next)
+                setSelectedId(null)
+              }}
+              ariaLabel="Show customers for"
+              options={[
+                { value: '', label: 'All branches' },
+                ...branches.map((b) => ({ value: b.id, label: b.name })),
+              ]}
+            />
+          ) : null}
+          {canManage ? (
+            <Button
+              onClick={() => {
+                setSelectedId(null)
+                startCreate()
+              }}
+            >
+              Add customer
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {error && !showForm ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
 
-      {canViewAll ? (
-        <Card title="Branch">
-          <Field label="Show customers for" htmlFor="cust-branch">
-            <SelectInput
-              id="cust-branch"
-              value={branchId}
-              onChange={(e) => {
-                setBranchId(e.target.value)
-                setSelectedId(null)
-              }}
-            >
-              <option value="">All branches</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </SelectInput>
-          </Field>
-        </Card>
-      ) : null}
-
-      <Card title="Summary">
-        <div className="row" style={{ flexWrap: 'wrap', gap: 28 }}>
-          <div>
-            <p className="muted">Customers</p>
-            <strong style={{ fontSize: 20 }}>{totals.customers}</strong>
-          </div>
-          <div>
-            <p className="muted">With balance</p>
-            <strong style={{ fontSize: 20 }}>{totals.withBalance}</strong>
-          </div>
-          <div>
-            <p className="muted">Total receivables</p>
-            <strong style={{ fontSize: 20 }}>{formatPhp(totals.balance)}</strong>
-          </div>
-          <div>
-            <p className="muted">Overdue</p>
-            <strong style={{ fontSize: 20, color: totals.overdue ? 'var(--color-danger)' : undefined }}>
-              {totals.overdue}
-            </strong>
-          </div>
+      <div className="ui-stats">
+        <div className="ui-stat">
+          <span className="ui-stat-label">Customers</span>
+          <strong className="ui-stat-value num">{totals.customers}</strong>
+          <span className="ui-stat-sub">Records in this view</span>
         </div>
-      </Card>
+        <div className="ui-stat">
+          <span className="ui-stat-label">With balance</span>
+          <strong className="ui-stat-value num">{totals.withBalance}</strong>
+          <span className="ui-stat-sub">
+            {totals.withBalance === 0 ? 'No open balances' : 'Carrying an open balance'}
+          </span>
+        </div>
+        <div className="ui-stat">
+          <span className="ui-stat-label">Total receivables</span>
+          <strong className="ui-stat-value num">{formatPhp(totals.balance)}</strong>
+          <span className="ui-stat-sub">Open sale balances</span>
+        </div>
+        <div className={`ui-stat${totals.overdue > 0 ? ' is-warning' : ''}`}>
+          <span className="ui-stat-label">Overdue</span>
+          <strong className="ui-stat-value num">{totals.overdue}</strong>
+          <span className="ui-stat-sub">{totals.overdue === 0 ? 'Nothing overdue' : 'Needs follow-up'}</span>
+        </div>
+      </div>
 
       <Modal
         open={showForm && canManage}
@@ -288,7 +326,7 @@ export function CustomersPage() {
           editingId
             ? 'Update the customer record.'
             : canViewAll
-              ? 'Saved to the branch selected above.'
+              ? 'Saved to the branch selected in the header.'
               : 'Saved to your branch.'
         }
         busy={saving}
@@ -349,20 +387,68 @@ export function CustomersPage() {
         </form>
       </Modal>
 
+      <Modal
+        open={Boolean(deletingAccount)}
+        onClose={() => {
+          if (!deleteBusy) setDeletingAccount(null)
+        }}
+        title="Delete customer"
+        subtitle={deletingAccount?.customer.name}
+        size="sm"
+        busy={deleteBusy}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeletingAccount(null)} disabled={deleteBusy}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => void confirmDelete()}
+              loading={deleteBusy}
+              disabled={Boolean(deletingAccount && deletingAccount.balance > 0)}
+            >
+              Delete customer
+            </Button>
+          </>
+        }
+      >
+        <div className="stack">
+          <p className="muted">
+            The customer is removed from this list and can no longer be selected on new sales. Existing sales,
+            payments and receipts stay on file.
+          </p>
+          {deletingAccount && deletingAccount.balance > 0 ? (
+            <div className="error-banner">
+              This customer still has {formatPhp(deletingAccount.balance)} in open balances. Settle or reassign
+              those sales before deleting the account.
+            </div>
+          ) : null}
+        </div>
+      </Modal>
+
       <Card
+        ref={listTopRef}
+        className="ui-scroll-target"
         title="Customer list"
         subtitle={`${filtered.length} of ${accounts.length} shown`}
       >
-        <div className="row" style={{ alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <Field label="Search" htmlFor="cust-search">
-              <TextInput
-                id="cust-search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Name, contact, or address"
-              />
-            </Field>
+        <div className="ui-toolbar">
+          <div className="ui-search">
+            <Icon name="search" size={16} className="ui-search-icon" />
+            <TextInput
+              className="ui-search-input"
+              id="cust-search"
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search name, contact, or address"
+              aria-label="Search customers"
+            />
+            {query ? (
+              <button type="button" className="ui-search-clear" onClick={() => setQuery('')} aria-label="Clear search">
+                <Icon name="close" size={14} />
+              </button>
+            ) : null}
           </div>
           <Button variant="secondary" onClick={exportBalances} disabled={filtered.length === 0}>
             Export CSV
@@ -372,9 +458,19 @@ export function CustomersPage() {
         {loading && accounts.length === 0 ? (
           <SkeletonTable rows={5} cols={5} />
         ) : filtered.length === 0 ? (
-          <div className="empty-state">No customers yet.</div>
+          <div className="empty-state">
+            {query.trim() ? `No customers match “${query.trim()}”.` : 'No customers yet.'}
+          </div>
         ) : (
-          <Table>
+          <Table className="ui-table-fixed">
+            <colgroup>
+              <col style={{ width: '25%' }} />
+              <col style={{ width: '17%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '15%' }} />
+            </colgroup>
             <thead>
               <tr>
                 <th>Name</th>
@@ -382,7 +478,7 @@ export function CustomersPage() {
                 <th>Open sales</th>
                 <th>Balance</th>
                 <th>Next due</th>
-                <th />
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -407,13 +503,35 @@ export function CustomersPage() {
                   </td>
                   <td>
                     <div className="row">
-                      <Button variant="ghost" onClick={() => setSelectedId(a.customer.id)}>
-                        Open
-                      </Button>
                       {canManage ? (
-                        <Button variant="secondary" onClick={() => startEdit(a)}>
-                          Edit
-                        </Button>
+                        <>
+                          <Button
+                            variant="secondary"
+                            className="ui-icon-btn"
+                            aria-label={`Edit ${a.customer.name}`}
+                            title="Edit customer"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              startEdit(a)
+                            }}
+                          >
+                            <Icon name="edit" size={16} />
+                          </Button>
+                          <Button
+                            variant="danger"
+                            className="ui-icon-btn"
+                            aria-label={`Delete ${a.customer.name}`}
+                            title="Delete customer"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setDeletingAccount(a)
+                              setMessage(null)
+                              setError(null)
+                            }}
+                          >
+                            <Icon name="trash" size={16} />
+                          </Button>
+                        </>
                       ) : null}
                     </div>
                   </td>

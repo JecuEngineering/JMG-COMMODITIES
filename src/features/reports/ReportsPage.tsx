@@ -6,6 +6,7 @@ import { DateInput } from '../../components/DateInput'
 import { Field, SelectInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Pagination, usePaged } from '../../components/Pagination'
+import { ScopePill } from '../../components/ScopePill'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { fetchBranches } from '../inventory/inventoryApi'
@@ -258,6 +259,13 @@ export function ReportsPage() {
     <div className="app-page stack">
       <div className="page-header">
         <div>
+          <ScopePill
+            label={
+              branchId === 'all'
+                ? 'All branches'
+                : branches.find((b) => b.id === branchId)?.name ?? 'Branch'
+            }
+          />
           <h1>Reports</h1>
           <p>Daily sales, cash on hand, margins, receivables — export to CSV or print to PDF.</p>
         </div>

@@ -1,5 +1,6 @@
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
+import { ScopePill } from '../../components/ScopePill'
 import { ROLE_LABELS } from '../../lib/roles'
 import { useAuth } from './AuthContext'
 
@@ -11,6 +12,7 @@ export function MePage() {
     <div className="app-page stack">
       <div className="page-header">
         <div>
+          <ScopePill />
           <h1>Me</h1>
           <p>Your account and branch access</p>
         </div>

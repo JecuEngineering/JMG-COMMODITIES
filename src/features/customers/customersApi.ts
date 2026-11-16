@@ -138,6 +138,16 @@ export async function createCustomerRecord(input: {
   return data as Customer
 }
 
+export async function deleteCustomerRecord(id: string): Promise<string> {
+  const deletedAt = new Date().toISOString()
+  const { error } = await supabase
+    .from('customers')
+    .update({ active: false, deleted_at: deletedAt })
+    .eq('id', id)
+  if (error) throw error
+  return deletedAt
+}
+
 export async function updateCustomerRecord(
   id: string,
   input: {

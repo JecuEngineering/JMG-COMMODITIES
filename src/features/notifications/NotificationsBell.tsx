@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { SkeletonText } from '../../components/Loading'
+import { Icon } from '../../app/Icon'
 import { useAuth } from '../auth/AuthContext'
 import {
   canApproveFundRequest,
@@ -201,7 +202,7 @@ export function NotificationsBell() {
           if (!open) void load()
         }}
       >
-        🔔
+        <Icon name="bell" size={18} />
         {total > 0 ? <span className="shell-notify-count">{total > 99 ? '99+' : total}</span> : null}
       </button>
 
@@ -210,7 +211,7 @@ export function NotificationsBell() {
           <div className="shell-notify-head">
             <strong>Notifications</strong>
             <button type="button" className="shell-menu-close" aria-label="Close notifications" onClick={() => setOpen(false)}>
-              ✕
+              <Icon name="close" size={16} />
             </button>
           </div>
           {loading ? (

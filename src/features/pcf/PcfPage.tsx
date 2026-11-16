@@ -7,6 +7,7 @@ import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
 import { Pagination, usePaged } from '../../components/Pagination'
+import { ScopePill } from '../../components/ScopePill'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { useCompanySettings } from '../settings/useCompanySettings'
@@ -700,8 +701,9 @@ export function PcfPage() {
     <div className="app-page stack">
       <div className="page-header">
         <div>
+          <ScopePill label={branchLabel} />
           <h1>Petty cash</h1>
-          <p>{branchLabel}</p>
+          <p>Funds, expenses, replenishments and the monitoring report</p>
         </div>
         <div className="pcf-toolbar no-print">
           {visibleFunds.length > 1 ? (

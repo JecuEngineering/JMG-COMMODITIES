@@ -28,7 +28,7 @@ function trimmedText(el: Element | null | undefined) {
   return (el?.textContent ?? '').replace(/\s+/g, ' ').trim()
 }
 
-export function Table({ children }: { children: ReactNode }) {
+export function Table({ children, className = '' }: { children: ReactNode; className?: string }) {
   const [detail, setDetail] = useState<RowDetail | null>(null)
   const [isPhone, setIsPhone] = useState(false)
 
@@ -69,7 +69,7 @@ export function Table({ children }: { children: ReactNode }) {
   return (
     <>
       <div className="ui-table-wrap" onClick={openRow}>
-        <table className="ui-table">{children}</table>
+        <table className={`ui-table ${className}`.trim()}>{children}</table>
       </div>
       {detail ? (
         <Modal

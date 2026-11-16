@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import './ui.css'
 
 export interface ComboOption {
@@ -20,9 +21,11 @@ interface ComboboxProps {
 export function Combobox({ id, value, options, onChange, placeholder = 'Searchâ€¦', emptyText = 'No matches', disabled }: ComboboxProps) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState(0)
+  const [rect, setRect] = useState<DOMRect | null>(null)
 
   const selected = useMemo(() => options.find((option) => option.value === value), [options, value])
 
@@ -38,8 +41,24 @@ export function Combobox({ id, value, options, onChange, placeholder = 'Searchâ€
 
   useEffect(() => {
     if (!open) return
+    function place() {
+      const el = inputRef.current
+      if (el) setRect(el.getBoundingClientRect())
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
     const onDown = (event: MouseEvent) => {
-      if (!wrapRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node
+      if (!wrapRef.current?.contains(target) && !listRef.current?.contains(target)) {
         setOpen(false)
         setQuery('')
       }
@@ -79,6 +98,22 @@ export function Combobox({ id, value, options, onChange, placeholder = 'Searchâ€
     }
   }
 
+  let listStyle: React.CSSProperties | undefined
+  if (rect) {
+    const gap = 6
+    const spaceBelow = window.innerHeight - rect.bottom - gap - 12
+    const spaceAbove = rect.top - gap - 12
+    const openUp = spaceBelow < 180 && spaceAbove > spaceBelow
+    const maxHeight = Math.min(280, Math.max(80, openUp ? spaceAbove : spaceBelow))
+    listStyle = {
+      top: openUp ? rect.top - gap - maxHeight : rect.bottom + gap,
+      left: rect.left,
+      width: rect.width,
+      right: 'auto',
+      maxHeight,
+    }
+  }
+
   return (
     <div className="ui-combo" ref={wrapRef}>
       <input
@@ -103,29 +138,32 @@ export function Combobox({ id, value, options, onChange, placeholder = 'Searchâ€
       <svg className="ui-combo-caret" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
         <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      {open ? (
-        <div className="ui-combo-list" role="listbox">
-          {filtered.length === 0 ? (
-            <div className="ui-combo-empty">{emptyText}</div>
-          ) : (
-            filtered.slice(0, 60).map((option, index) => (
-              <button
-                type="button"
-                key={option.value}
-                className={`ui-combo-option${option.value === value ? ' is-selected' : ''}${index === highlight ? ' is-active' : ''}`}
-                role="option"
-                aria-selected={option.value === value}
-                onMouseDown={(event) => event.preventDefault()}
-                onMouseEnter={() => setHighlight(index)}
-                onClick={() => commit(option)}
-              >
-                <span>{option.label}</span>
-                {option.meta ? <span className="ui-combo-meta">{option.meta}</span> : null}
-              </button>
-            ))
-          )}
-        </div>
-      ) : null}
+      {open && listStyle
+        ? createPortal(
+            <div className="ui-combo-list ui-combo-list-portal" role="listbox" ref={listRef} style={listStyle}>
+              {filtered.length === 0 ? (
+                <div className="ui-combo-empty">{emptyText}</div>
+              ) : (
+                filtered.slice(0, 60).map((option, index) => (
+                  <button
+                    type="button"
+                    key={option.value}
+                    className={`ui-combo-option${option.value === value ? ' is-selected' : ''}${index === highlight ? ' is-active' : ''}`}
+                    role="option"
+                    aria-selected={option.value === value}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onMouseEnter={() => setHighlight(index)}
+                    onClick={() => commit(option)}
+                  >
+                    <span>{option.label}</span>
+                    {option.meta ? <span className="ui-combo-meta">{option.meta}</span> : null}
+                  </button>
+                ))
+              )}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }

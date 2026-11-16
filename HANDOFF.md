@@ -1,6 +1,117 @@
 # JMG System – Agent Handoff
 
-**Last updated:** 2026-11-15 (Receipts attachable from the expense list/report tables with View/Replace, exports carry a RECEIPT column of 7-day signed links per row; Expense receipt attachments (photo/PDF), sales history first with the collect-payment moved into a modal, Today/All-dates quick filters; before that: PCF expense sheets with cut/history, sales history color-coded money summary, Liquidations module removed, SKU renamed to Rice variety; Petty cash restructure — Cebu fund ₱50,000, ₱5,000 voucher cap, Vouchers+Expenses merged into one Expenses ledger, liquidation report in the PETTYCASH MONITORING matrix, PCV numbering, November 9–14 Cebu sheet imported (29 vouchers / ₱17,339); `create_sale` accepts `p_payments` and `p_dr_number`; Sales CEBU Sales-In ledger imported — 561 sales / 832 lines / ₱56,459,750; desktop layout from 720 px with an icon rail on laptop/Mac windows; per-tab sessions ending on tab close + 5-minute idle sign-out; official company details on the public site; account editing, branch map pins, container numbers, customers module, installment schedule, CSV exports)
+**Last updated:** 2026-11-16 (Sales money summary payment totals now share the top-row 1.4rem number size; Sales-In ledger fits the card with no horizontal scrollbar — the three payment tick columns merged into one "Paid via" pill column, text cells wrap, numbers/date/Print DR stay on one line; Price history table uses the new `.ui-table-fluid` so the modal has no horizontal scrollbar; Price history opens in a modal instead of inline below the price list; Set-price modal auto-fills the current price after weight + brand, on top of weight chips and a searchable brand combobox whose list is now portalled; Customers row actions are icon-only pencil/trash buttons under an "Actions" header; Customers row Delete with audit + fixed table columns; Customer list search rebuilt as a toolbar; Customers list scrolls back to its header after paging; Branch scope pill shared and applied above every module title, with a matching pill-shaped `ScopeSelect` branch switcher on Dashboard and Inventory; Dashboard rebuilt to the plan mockup — KPI cards, sales-by-variety bars, stock-on-hand list with OK/Low/Out badges, fund-requests awaiting action with Review/Release; UI foundation pass with design tokens, type scale, shared components, SVG icons, grouped sidebar. Next module pass: Sales. Before that: receipts attachable from the expense list/report tables with View/Replace, exports carry a RECEIPT column of 7-day signed links per row; Expense receipt attachments (photo/PDF), sales history first with the collect-payment moved into a modal, Today/All-dates quick filters; PCF expense sheets with cut/history, sales history color-coded money summary, Liquidations module removed, SKU renamed to Rice variety; Petty cash restructure — Cebu fund ₱50,000, ₱5,000 voucher cap, Vouchers+Expenses merged into one Expenses ledger, liquidation report in the PETTYCASH MONITORING matrix, PCV numbering, November 9–14 Cebu sheet imported (29 vouchers / ₱17,339); `create_sale` accepts `p_payments` and `p_dr_number`; Sales CEBU Sales-In ledger imported — 561 sales / 832 lines / ₱56,459,750; desktop layout from 720 px with an icon rail on laptop/Mac windows; per-tab sessions ending on tab close + 5-minute idle sign-out; official company details on the public site; account editing, branch map pins, container numbers, customers module, installment schedule, CSV exports)
+
+## Sales money summary: one number size (2026-11-16)
+
+- `.sales-money-main` and `.sales-money-pay` values now share `font-size: 1.4rem` (22.4 px); previously only the main row was 1.4rem and the payment cards fell back to 1.15rem, which made Cash / GCash / Check look secondary. Under 720 px both rows are 1.2rem (cards become label/value rows).
+- Keep the two rows in sync when editing `sales.css` — the payment totals sit directly beneath the main row and any size difference reads as a hierarchy that does not exist. Card label/colour variants (`is-gross`, `is-collected`, `is-due`, `is-clear`, `is-cash`, `is-gcash`, `is-check`) are unchanged.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass; computed sizes 22.4 px on both rows with no overflow at 1288 and 960 px, 1.2rem in a 390 px iframe; preview deleted.
+
+## Sales-In ledger fits the card (2026-11-16)
+
+- **Do not re-add the three Cheque/Cash/GCash tick columns.** Each nowrap tick column added 30–40 px of min-content, and with the description floor the ledger's minimum width (1055 px) overflowed ordinary laptop cards. Payment now renders in one **Paid via** cell: `.ledger-pay` (flex, wrap, 4 px gap) containing `.ledger-pay-tag` pills — `.is-check` jade, `.is-cash` gold, `.is-gcash` blue (the same palette as the history money cards). `paymentInfo(sale)` is unchanged; values show only on the sale's first line (`index === 0`), and a sale with no payment shows a muted “—”.
+- **Wrapping rules** live in `sales.css`: `.sales-ledger .ui-table td` wraps by default; `.num`, `td:first-child`, `td:nth-child(2)` and `td:last-child` stay `nowrap`. The positional selectors follow the current 9 columns (1 Date, 2 Invoice no., 9 Print DR) — if columns are added or reordered, update them. The unused `.center` rule was removed.
+- Cell padding is 8 px horizontally (first/last 14 px) and the table keeps `className="ui-table-fluid"`. The tfoot still spans 4 cells for TOTAL, then Bags / blank Price / Amount, then `colSpan={2}` for Paid via + Print DR.
+- **Measured**: min-content 889 px; `clientWidth === scrollWidth` at 1024, 1040, 1100, 1180 and 1288 px. Under ~1000 px the wrapper scrolls sideways by design; phones keep the standard scrollable table and row-tap detail. Don't chase the sub-1000 case by hiding data.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass; desktop screenshot and 390 px iframe reviewed with realistic rows; preview files deleted. Live Supabase data not exercised — needs a staff login.
+
+## Tables inside modals: `.ui-table-fluid` (2026-11-16)
+
+- `.ui-table` has a 600 px `min-width` floor for wide list pages. Inside a `md` modal the body is 596 px, so any 4-column table overflows by a few pixels and shows a scrollbar. For small tables in modals/cards add `className="ui-table-fluid"` (`min-width: 0`) so the table shrinks to the container; the price-history table now uses it.
+- Keep the floor for list pages (and `.ui-table-fixed`'s 960 px) — those are meant to scroll on narrow screens. On phone the history table still scrolls horizontally, matching other tables.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass; probe measured `clientWidth === scrollWidth === 596` inside the modal and screenshots at 1280 px / 390 px confirmed. Preview deleted.
+
+## Price history as a modal (2026-11-16)
+
+- The Price list **View** action sets `historySkuId` only (no more toggle/Hide) and a `Modal` renders while `historySku` resolves, with subtitle `${variety.name} · ${size}kg`, `size="md"`, and a secondary **Close** in the footer. The history table (`Table`) is unchanged; `priceHistory` still filters `prices` by the SKU.
+- `historySku` is derived via `skus.find(...)` rather than storing the whole SKU, so a `skus` reload keeps it fresh; close sets `historySkuId` back to `''`.
+- Do not reintroduce an inline history block under the list — it moved the pagination and page layout. After **Set price** saves, the modal for the saved SKU opens (same `setHistorySkuId(priceSkuId)` as before) so the new dated row is visible immediately.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass; temporary preview (deleted) checked at 1280 px and inside a 390 px iframe. Phone shows the usual horizontally-scrollable table. Live data not exercised — needs a staff login.
+
+## Set price: auto-fill current price (2026-11-16)
+
+- `selectedPrice = useMemo(() => currentPrice(prices, priceSkuId, priceEffectiveFrom), …)` and an effect on `[priceSkuId, selectedPrice]` write `priceAmount` — `price.price.toFixed(2)` (the `Price.price` type is `number`; do not assign it directly to the string-backed input). No SKU selected → the amount is cleared.
+- The effect keys off the *resolved Price row*, not the date string, so changing the effective date to a date served by the same row never overwrites a manually edited amount; a different applicable row does.
+- `priceHint` under the field reports the source (`Current price ₱… · effective …`) or that no price exists yet. The price/date wrapper uses `stack` (it previously had no gap, which the hint made obvious).
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass; temporary preview (deleted) confirmed the 25 kg → Jasmine prefill (`1450.00`) and hint. Live insert not exercised — needs a staff login.
+
+## Set price: weight chips + searchable brand (2026-11-16)
+
+- **Weight**: use `ChipRow` + `Chip` for short option sets instead of a `<select>`; the price modal renders `priceSizes.map(size => <Chip active={priceSackSize === size} …>{size} kg</Chip>)`. Keep the `sr-only` input with `id="price-size"` so the `Field` label still has a target, and put `required` on the `Field` (new `Field` prop → `.ui-field.is-required`) — chips are not native form controls, so the `:has(:required)` asterisk does not fire on its own.
+- **Brand**: use the shared `Combobox` (`src/components/Combobox.tsx`) — it already filters by label/meta, supports keyboard nav and `disabled`. Pass `id`, `value` (still the SKU id), `options: { value, label }[]`, `onChange`. It renders the selected label when closed, so no extra display code is needed. Do not drop back to `SelectInput` for long brand lists.
+- Because neither control is native-required, `setPrice` now validates `priceSackSize && priceSkuId` and shows “Choose a sack weight, then a brand.”
+- **Combobox is now portalled**: its list renders into `document.body` as `.ui-combo-list-portal` (fixed, z-index 450, above the 400 modal backdrop) and positions itself from the input rect, capping height to the viewport and flipping upward when space below is tight. This is what fixed the dropdown being clipped by `.ui-modal-body` (`overflow-y: auto`) under the modal footer — any future combobox/typeahead inside a modal gets the same behaviour for free. Outside-click checks both the wrapper and the portal list (`listRef`), so selecting an option still commits.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass; temporary stateful preview (deleted) confirmed chip selection, filtered brand list and portal overlay at 1280 px and a 390 px iframe. Live insert not exercised — needs a staff login.
+
+## Set price: weight first, then brand (2026-11-16)
+
+- In `ProductsPage.tsx` the price form now has `priceSackSize` (`SackSize | ''`) before `priceSkuId`. **Sack weight** options come from `SACK_SIZES` filtered to sizes that exist in `skus`; **Brand** lists `skus.filter(s => s.sack_size === priceSackSize)` sorted by variety name and shows `sku.variety.name` **without** the kg suffix. The brand select is `disabled` until a size is chosen, and changing the size resets `priceSkuId`.
+- `prices` still stores the SKU id — do not store size+brand separately; the SKU row is what ties variety and sack size together. If another form ever picks a variety, follow the same weight → brand order instead of a flat “name · size” list.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass; a temporary stateful preview (same markup and derivation, deleted) verified the 25 kg → brand list (no “kg” in labels) and screenshots at 1280 px / 390 px iframe. Live insert not exercised — needs a staff login.
+
+## Customers row actions as icons (2026-11-16)
+
+- **Use `.ui-icon-btn`** (in `ui.css`) for icon-only row actions: add it as the `className` on a normal `Button` so the variant still supplies the colour — `variant="secondary"` pencil, `variant="danger"` trash. It overrides the label padding with a 36 px square (48 px `--touch-min` under 720 px) and an 8 px radius. Always set both `aria-label` (with the record name) and `title`, and `event.stopPropagation()` on the click because the row opens the detail card.
+- Icons come from `IconName` — `edit` and `trash` were added in `Icon.tsx`; do not use emoji or inline SVG for these.
+- **Header**: the action column now has a real `<th>Actions</th>` rather than an empty cell; keep a visible header whenever the column holds buttons.
+- **Column split** for the customers table is now 25/17/14/14/15/15 — the Actions share shrank from 20 % because two icons need far less room; Name and Contact gained the difference. If more actions are added later, re-measure the cell instead of guessing.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass; header offsets identical across pages at 1280 px and 504 px and the actions cell fits without overflow (preview deleted). Live Supabase path still unverified — needs a staff login.
+
+## Customers: delete + fixed columns (2026-11-16)
+
+- **Delete**: `deleteCustomerRecord(id)` in `customersApi.ts` soft-deletes (`active: false`, `deleted_at`) and returns the timestamp; the page then calls `writeAuditLog({ action: 'delete', tableName: 'customers', … })`. The confirmation modal (`deletingAccount` / `deleteBusy` state) is **blocked** while `account.balance > 0` — the warning tells the user to settle or reassign the sale first. Row buttons must call `event.stopPropagation()` because the `<tr>` opens the detail card.
+- **Do not re-add an Open button**: the row click is the way into the customer detail; actions are Edit + Delete only.
+- **Fixed columns**: add `className="ui-table-fixed"` to `Table` (now accepts a class) and provide a `<colgroup>` with percentage widths. `.ui-table-fixed` is `table-layout: fixed` with a 960 px floor, so columns do not shift between pages and six columns stay readable on phone (the wrapper scrolls). The current split is in the icon-actions section above.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass; headless probe showed identical `th` x-offsets on pages 1 and 2 at 1280 px and 504 px; delete modal screenshotted in allowed and blocked states (preview deleted). Live Supabase delete not exercised — needs a staff login.
+
+## Customer list search toolbar (2026-11-16)
+
+- The search field is no longer a labeled `Field` sitting against the table. Lists that need a filter row should use the shared **`.ui-toolbar`** + **`.ui-search`** pattern (in `ui.css`): a `div.ui-toolbar` with `align-items: center`, 12 px gap, 16 px `margin-bottom`, containing `div.ui-search` (magnifier `Icon name="search"` absolutely positioned at 14 px, `TextInput` with `className="ui-search-input"` for the 40 px left/right padding, and an optional `button.ui-search-clear` with a `close` icon that clears the value) plus the row actions. Use `aria-label` instead of a visible label; **do not** put a `Field` label back — it re-creates the cramped look.
+- `type="search"` is used; WebKit's native cancel/decoration pseudo-elements are hidden so only the custom × shows. The icon turns jade on `:focus-within`. Under 520 px `.ui-search` takes the full row and the action button wraps below.
+- The Customers empty state now distinguishes “No customers match “…”” from “No customers yet.”
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass; 1280 px and 390 px iframe screenshots with empty/filled queries (preview deleted). Not exercised against live data (no staff login).
+
+## Customer list paging keeps the list in view (2026-11-16)
+
+- **`usePaged(items, size, scrollTarget?)`** (`src/components/Pagination.tsx`) takes an optional ref. When the user clicks a page or changes rows-per-page and the target’s top is above the viewport, it scrolls that element to the top after the new rows render. It skips the scroll when the list is already visible, ignores the initial mount, and uses an instant jump when `prefers-reduced-motion` is set.
+- **Wiring a list**: `const listTopRef = useRef<HTMLElement>(null)`, pass it as the third argument, and give the list `Card` `ref={listTopRef} className="ui-scroll-target"`. `.ui-scroll-target` supplies `scroll-margin-top` (16 px desktop, `--header-height` + 12 px under 720 px so the card clears the sticky topbar). Currently only the Customers list opts in; the Sales list should adopt the same two lines.
+- `Card` now accepts `ref` as a prop (React 19 style) and passes it to its `<section>`.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass. A temporary preview using the real `usePaged` + `Card` confirmed page 2 and rows-per-page 25 land the card header at 16 px (desktop) and 76 px (phone) under reduced motion; Chrome headless does not animate smooth scrolls, so the smooth path was not visually observed. Preview deleted.
+
+## Customers module pass (2026-11-16)
+
+- **Header**: the all-branches filter is a `ScopeSelect` next to **Add customer** (the separate “Branch” card is gone); changing it clears the open customer detail. The new-customer hint refers to the branch selected in the header.
+- **Summary**: the old “Summary” card is now four KPI cards using the shared `.ui-stats` / `.ui-stat` classes in `ui.css` — Customers, With balance, Total receivables, Overdue. Give a card `className="ui-stat is-warning"` when it needs attention (Overdue uses it when `> 0`); values carry `.num`. The grid is 4/2/1 columns at desktop/≤900/≤480 px.
+- Dashboard still uses its own `.dash-metric` classes; prefer `.ui-stat` for new KPI rows outside the Dashboard unless matching its `is-three`/`is-two` variants.
+
+## Branch scope pill (2026-11-16)
+
+- **Use `ScopePill`** (`src/components/ScopePill.tsx`, `.ui-scope` in `ui.css`) as the first child of every module header, above the `<h1>`. With no props it shows `user.profile.branch.name` or `All branches / HQ`.
+- **Pick the right label**: branch-scoped pages pass the branch currently being viewed (their own selector); pages that can view everything pass `All branches`; company-wide modules pass `Company-wide` (Employees, Settings, Audit log, Website Inquiries, Products & Prices, Containers). Do not put branch text back in the header subtitle.
+- The pill is 12 px caps, jade-mist fill, `--color-jade-muted` border, `--radius-pill`, 15 px `pin` icon; it is intentionally larger than a badge so the active scope is obvious.
+- **Glow**: `.ui-scope` runs `ui-scope-glow` (3.6 s infinite) between a faint resting halo and a jade `0 0 20px 4px` halo with a 1.03 scale at 50 %. Colours come from `--color-jade-glow`, `--color-jade-glow-soft` and `--color-jade-soft-bright`. The global `prefers-reduced-motion` rule freezes it on the resting glow, so new pill variants must keep a visible static shadow.
+- **Interactive scopes use `ScopeSelect`** (`src/components/ScopeSelect.tsx`, `.ui-scope-select`): pass `value`, `onChange(value)`, `options: { value, label }[]` and `ariaLabel`. It is a custom listbox, not a native select: the pill button opens a styled `.ui-scope-select-panel` under it (selected option on jade-mist with a check), supports ↑/↓/Home/End/Enter/Space/Escape/Tab, closes on outside click and returns focus to the trigger. Used on Dashboard, the Inventory header and the Customers header (next to Add customer); below 720 px both pill and panel go full width. Do not add a new native `<select>` for scope switching.
+
+## Dashboard module pass (2026-11-16)
+
+- **`DashboardPage.tsx`** now follows the mockup: KPI row → `Sales by variety` + `Stock on hand` panels → `Fund requests awaiting action`. Removed the 7-day vertical bar chart, the "Needs attention" list and the upcoming-container fetch; `fetchContainers`/`canViewContainers` are no longer imported here. `canViewInventory` gates the stock fetch/card.
+- **Data shaping**: stock balances are aggregated per `sku_id` across the scope (`label = variety · Nkg`, sums of `on_hand`) and sorted out → low → OK; low/out rows surface first. Requests are filtered by `ACTIONABLE[role]` (still the source for reviewer stages), capped at 6 rows, with status text from `REQUEST_STATUS` (`submitted`/`forwarded`/`approved` → Waiting on accounting / Waiting on owner / Ready to release).
+- **Phone**: `.dash-requests` (table) is hidden under 720 px and `.dash-requests-list` cards render instead (`dash-request-card` grid: purpose + amount, requester · branch, badge). Branch column hides under 1024 px, requester under 900 px. KPI cards go 2-up under 1240 px and 1-up under 560 px; panels stack under 960 px.
+- **Metrics gating**: Today's sales / Cash on hand / Customer balances require `canViewSales`; Petty cash requires `canViewPcf`, so a `cashier` sees 3 cards and `warehouse` none (previously zeros were shown). The metrics grid has `is-three`/`is-two` variants.
+- **Amount formatting**: `formatPhp` for card/table values, `compactPhp` only for the "yesterday" sub-lines and bar labels, `Intl` integer formatting for sacks. Every amount carries `.num` for tabular figures.
+- **`Field.tsx` fix**: `TextInput`, `SelectInput`, `TextArea` now merge a passed `className` into `ui-input` (previously the custom class replaced it, dropping input styling — this is what left `.dash-branch-pick` unstyled).
+- **Branch scope chip**: the shared `ScopePill` sits above the title and receives `scopeLabel` — the user's branch, or `All branches`/the selected branch for owner and GA. Keep branch context here rather than in the subtitle; the subtitle is only `Today · <date>`.
+- **Verification**: `npx tsc -b --force` / `npx vite build` pass. Visual check at 1280 px and a 390 px iframe with representative data via a temporary preview entry (deleted). No staff login, so live authenticated data was not exercised.
+
+## UI foundation pass (2026-11-16)
+
+- **How to style new UI**: use tokens from `src/styles/tokens.css` — never hardcode a hex colour, radius, shadow or spacing value in a feature stylesheet. Type sizes are `--text-2xs` (11 px caps/labels) through `--text-2xl`; page titles use `--text-display`. Spacing is `--space-1…16` (4/8/12/16/20/24/32/40/48/64). Cards are `--radius-card` (16 px) with a 1 px `--color-border`, no heavy shadow; controls are `--control-h` (44 px desktop, 48 px phone) at `--radius-control`; touch targets never below `--touch-min` (48 px) on phone. Money/quantity cells get `className="num"` (or `.money`) for tabular figures; right-align them.
+- **Icons**: use `import { Icon } from '../../app/Icon'` and `<Icon name="…" />` — do not add emoji icons. `IconName` = every `NavItemId` plus `bell`, `close`, `menu`, `power`. Stroke is 1.7 and `currentColor`, so colour comes from the parent.
+- **Navigation groups**: `NavItem.group` in `src/lib/roles.ts` places items in `Overview · Sales & Customers · Stock · Finance · Admin`; `groupedNav()` drops empty groups. Adding a nav item means setting both `roles` and `group`; a new group needs an entry in `NAV_GROUPS` and a display slot in `groupedNav`.
+- **Table density**: `.ui-table` uses `--row-y` 10 px on desktop and `--row-y-phone` 13 px on phone; the shared `Table` opens a row-details modal on phone. Keep new tables inside `.ui-table-wrap` (or another `overflow-x: auto` box) — the shell depends on it to stay 390 px wide.
+- **Known gap**: no staff test login was available in the in-app browser, so the authenticated shell was verified with a temporary static harness at 1200 px and 390 px (since deleted). Next pass (Dashboard) should be verified in the real app if a login is provided.
+- **Verification for this pass**: `npx tsc -b --force` and `npx vite build` clean; login and landing rendered at both widths.
 
 ## Phone row details (2026-11-15)
 

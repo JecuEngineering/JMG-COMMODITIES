@@ -5,6 +5,7 @@ import { Chip, ChipRow } from '../../components/Chip'
 import { Field, TextArea } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Pagination, usePaged } from '../../components/Pagination'
+import { ScopePill } from '../../components/ScopePill'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate, todayInputValue } from '../../lib/dates'
@@ -139,6 +140,7 @@ export function InquiriesPage() {
     <div className="app-page stack">
       <div className="page-header">
         <div>
+          <ScopePill label="Company-wide" />
           <h1>Website Inquiries</h1>
           <p>Messages sent from the public contact form.</p>
         </div>

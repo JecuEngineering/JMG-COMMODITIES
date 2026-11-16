@@ -3,11 +3,13 @@ import { Badge } from '../../components/Badge'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
+import { Combobox } from '../../components/Combobox'
 import { DateInput } from '../../components/DateInput'
 import { Field, SelectInput, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
 import { Modal } from '../../components/Modal'
 import { Pagination, usePaged } from '../../components/Pagination'
+import { ScopePill } from '../../components/ScopePill'
 import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import { formatDate, todayInputValue } from '../../lib/dates'
@@ -49,6 +51,7 @@ export function ProductsPage() {
   const [skuOpen, setSkuOpen] = useState(false)
   const [priceOpen, setPriceOpen] = useState(false)
 
+  const [priceSackSize, setPriceSackSize] = useState<SackSize | ''>('')
   const [priceSkuId, setPriceSkuId] = useState('')
   const [priceAmount, setPriceAmount] = useState('')
   const [priceEffectiveFrom, setPriceEffectiveFrom] = useState(todayInputValue())
@@ -93,7 +96,49 @@ export function ProductsPage() {
     [prices, historySkuId],
   )
 
+  const historySku = useMemo(
+    () => skus.find((s) => s.id === historySkuId) ?? null,
+    [skus, historySkuId],
+  )
+
   const skuPager = usePaged(skus, 10)
+
+  const priceSizes = useMemo(
+    () => SACK_SIZES.filter((size) => skus.some((s) => s.sack_size === size)),
+    [skus],
+  )
+
+  const priceBrands = useMemo(
+    () =>
+      skus
+        .filter((s) => s.sack_size === priceSackSize)
+        .sort((a, b) => (a.variety?.name ?? '').localeCompare(b.variety?.name ?? '')),
+    [skus, priceSackSize],
+  )
+
+  const priceBrandOptions = useMemo(
+    () => priceBrands.map((sku) => ({ value: sku.id, label: sku.variety?.name ?? 'Variety' })),
+    [priceBrands],
+  )
+
+  const selectedPrice = useMemo(
+    () => (priceSkuId ? currentPrice(prices, priceSkuId, priceEffectiveFrom) : null),
+    [prices, priceSkuId, priceEffectiveFrom],
+  )
+
+  useEffect(() => {
+    if (!priceSkuId) {
+      setPriceAmount('')
+      return
+    }
+    setPriceAmount(selectedPrice ? selectedPrice.price.toFixed(2) : '')
+  }, [priceSkuId, selectedPrice])
+
+  const priceHint = !priceSkuId
+    ? undefined
+    : selectedPrice
+      ? `Current price ${formatPhp(selectedPrice.price)} · effective ${formatDate(selectedPrice.effective_from)}`
+      : 'No price on file for this brand and weight yet.'
 
   function exportSkus() {
     downloadCsv(
@@ -163,7 +208,11 @@ export function ProductsPage() {
 
   async function setPrice(event: FormEvent) {
     event.preventDefault()
-    if (!canEditPrices || !priceSkuId) return
+    if (!canEditPrices) return
+    if (!priceSackSize || !priceSkuId) {
+      setError('Choose a sack weight, then a brand.')
+      return
+    }
     const amount = parseMoneyInput(priceAmount)
     if (amount === null) {
       setError('Enter a valid price.')
@@ -209,6 +258,7 @@ export function ProductsPage() {
     <div className="app-page stack">
       <div className="page-header">
         <div>
+          <ScopePill label="Company-wide" />
           <h1>Products & Prices</h1>
           <p>Rice varieties, sack sizes, and dated price list. Changing a price never rewrites old sales.</p>
         </div>
@@ -428,24 +478,43 @@ export function ProductsPage() {
         >
           <form id="price-form" className="stack" onSubmit={setPrice}>
             {error ? <div className="error-banner">{error}</div> : null}
-            <Field label="Rice variety" htmlFor="price-sku">
-              <SelectInput
-                id="price-sku"
-                required
-                value={priceSkuId}
-                onChange={(e) => setPriceSkuId(e.target.value)}
-              >
-                <option value="">Select rice variety</option>
-                {skus.map((sku) => (
-                  <option key={sku.id} value={sku.id}>
-                    {sku.variety?.name ?? 'Variety'} · {sku.sack_size}kg
-                  </option>
+            <Field label="Sack weight" htmlFor="price-size" required>
+              <ChipRow>
+                {priceSizes.map((size) => (
+                  <Chip
+                    key={size}
+                    active={priceSackSize === size}
+                    onClick={() => {
+                      setPriceSackSize(size)
+                      setPriceSkuId('')
+                    }}
+                  >
+                    {size} kg
+                  </Chip>
                 ))}
-              </SelectInput>
+              </ChipRow>
+              <input
+                id="price-size"
+                className="sr-only"
+                readOnly
+                tabIndex={-1}
+                value={priceSackSize ? `${priceSackSize} kg` : ''}
+              />
             </Field>
-            <div>
+            <Field label="Brand" htmlFor="price-sku" required>
+              <Combobox
+                id="price-sku"
+                value={priceSkuId}
+                options={priceBrandOptions}
+                onChange={setPriceSkuId}
+                disabled={!priceSackSize}
+                placeholder={priceSackSize ? 'Search brand…' : 'Choose weight first'}
+                emptyText="No brand matches."
+              />
+            </Field>
+            <div className="stack">
               <div>
-                <Field label="Price per sack (₱)" htmlFor="price-amount">
+                <Field label="Price per sack (₱)" htmlFor="price-amount" hint={priceHint}>
                   <TextInput
                     id="price-amount"
                     required
@@ -485,11 +554,8 @@ export function ProductsPage() {
                   <td>{price ? formatPhp(price.price) : '—'}</td>
                   <td>{price ? formatDate(price.effective_from) : '—'}</td>
                   <td>
-                    <Button
-                      variant="ghost"
-                      onClick={() => setHistorySkuId(sku.id === historySkuId ? '' : sku.id)}
-                    >
-                      {sku.id === historySkuId ? 'Hide' : 'View'}
+                    <Button variant="ghost" onClick={() => setHistorySkuId(sku.id)}>
+                      View
                     </Button>
                   </td>
                 </tr>
@@ -509,16 +575,26 @@ export function ProductsPage() {
           noun="rice variety"
         />
 
-        {historySkuId ? (
-          <div className="stack" style={{ marginTop: 16 }}>
-            <h3 style={{ fontSize: '1rem' }}>Price history</h3>
-            <p className="muted">
+        {historySku ? (
+          <Modal
+            open
+            onClose={() => setHistorySkuId('')}
+            title="Price history"
+            subtitle={`${historySku.variety?.name ?? 'Variety'} · ${historySku.sack_size}kg`}
+            size="md"
+            footer={
+              <Button variant="secondary" onClick={() => setHistorySkuId('')}>
+                Close
+              </Button>
+            }
+          >
+            <p className="muted" style={{ marginBottom: 12 }}>
               Older rows stay forever so past sales keep the price that was effective on sale date.
             </p>
             {priceHistory.length === 0 ? (
               <div className="empty-state">No price history for this rice variety.</div>
             ) : (
-              <Table>
+              <Table className="ui-table-fluid">
                 <thead>
                   <tr>
                     <th>Effective from</th>
@@ -539,7 +615,7 @@ export function ProductsPage() {
                 </tbody>
               </Table>
             )}
-          </div>
+          </Modal>
         ) : null}
       </Card>
     </div>
