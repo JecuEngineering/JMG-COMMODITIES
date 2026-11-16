@@ -21,6 +21,8 @@ function publicSitePlugin(rawSiteUrl: string): Plugin {
       return html
         .replace('</head>', `  ${tags}\n  </head>`)
         .replaceAll('content="/JMG TRUCKS.jpg"', `content="${image}"`)
+        .replaceAll('content="/og-image.jpg', `content="${base}/og-image.jpg`)
+        .replaceAll('href="/og-image.jpg', `href="${base}/og-image.jpg`)
     },
     async closeBundle() {
       const sitemapPath = resolve('dist/sitemap.xml')
