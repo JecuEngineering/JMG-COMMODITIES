@@ -40,6 +40,14 @@ import './sales.css'
 
 type TabId = 'sales' | 'overdue' | 'shifts' | 'receipt'
 
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  cash: 'Cash',
+  gcash: 'GCash',
+  bank: 'Bank transfer',
+  check: 'Check',
+  installment: 'Installment',
+}
+
 function addDaysInput(value: string, days: number): string {
   const d = new Date(`${value}T00:00:00`)
   if (Number.isNaN(d.getTime())) return ''
@@ -481,6 +489,24 @@ export function SalesPage() {
       setError(e instanceof Error ? e.message : String(e))
     }
   }
+
+  const receiptItems = receiptSale?.items ?? []
+  const receiptPayments = [...(receiptSale?.payments ?? [])].sort((a, b) =>
+    a.payment_date.localeCompare(b.payment_date),
+  )
+  const receiptSacks = receiptItems.reduce((sum, item) => sum + Number(item.sacks), 0)
+  const receiptHasDiscount = receiptItems.some((item) => Number(item.discount) > 0)
+  const receiptStatus = receiptSale?.status === 'void'
+    ? 'voided'
+    : Number(receiptSale?.balance) > 0
+      ? Number(receiptSale?.amount_paid) > 0 ? 'partial' : 'unpaid'
+      : 'paid'
+  const receiptStatusLabel = {
+    voided: 'Voided',
+    partial: 'Partially paid',
+    unpaid: 'Unpaid',
+    paid: 'Fully paid',
+  }[receiptStatus]
 
   function printReceipt() {
     window.print()
@@ -1217,52 +1243,122 @@ export function SalesPage() {
             </Button>
           </div>
           {receiptSale ? (
-            <div className="dr-sheet">
+            <article className="dr-sheet" aria-label="Delivery receipt">
               <header className="dr-header">
-                {settings?.logo_url ? <img src={settings.logo_url} alt="" className="dr-logo" /> : null}
-                <div>
-                  <h2>{settings?.name ?? 'JMG Commodities Inc.'}</h2>
-                  <p>{settings?.address}</p>
-                  <p>TIN: {settings?.tin ?? '—'}</p>
+                <div className="dr-brand">
+                  {settings?.logo_url ? <img src={settings.logo_url} alt="" className="dr-logo" /> : null}
+                  <div>
+                    <h2>{settings?.name ?? 'JMG Commodities Inc.'}</h2>
+                    {settings?.address ? <p>{settings.address}</p> : null}
+                    {settings?.contacts ? <p>{settings.contacts}</p> : null}
+                    {settings?.tin ? <p>TIN: {settings.tin}</p> : null}
+                  </div>
                 </div>
                 <div className="dr-meta">
-                  <strong>DELIVERY RECEIPT</strong>
-                  <div>{receiptSale.dr_number}</div>
-                  <div>{formatDate(receiptSale.sale_date)}</div>
+                  <h3>Delivery receipt</h3>
+                  <strong>{receiptSale.dr_number || 'Not assigned'}</strong>
+                  <p>{formatDate(receiptSale.sale_date)}</p>
+                  <span className={`dr-status is-${receiptStatus}`}>{receiptStatusLabel}</span>
                 </div>
               </header>
-              <p>
-                Customer: <strong>{receiptSale.customer?.name}</strong>
-              </p>
-              <p>OR number: {receiptSale.or_number || '—'}</p>
-              <table className="dr-table">
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Sacks</th>
-                    <th>Price</th>
-                    <th>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(receiptSale.items ?? []).map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.source_description || (item.sku ? skuLabel(item.sku) : item.sku_id)}</td>
-                      <td>{item.sacks}</td>
-                      <td>{formatPhp(item.price_per_sack)}</td>
-                      <td>{formatPhp(item.line_total)}</td>
+
+              <div className="dr-parties">
+                <section aria-label="Customer details">
+                  <h3 className="dr-label">Customer</h3>
+                  <strong className="dr-customer-name">{receiptSale.customer?.name || 'Walk-in customer'}</strong>
+                  {receiptSale.customer?.address ? <p>{receiptSale.customer.address}</p> : null}
+                  {receiptSale.customer?.contact ? <p>{receiptSale.customer.contact}</p> : null}
+                </section>
+                <dl className="dr-details">
+                  <div><dt>Issuing branch</dt><dd>{receiptSale.branch?.name ?? '—'}</dd></div>
+                  <div><dt>OR number</dt><dd>{receiptSale.or_number || 'Not recorded'}</dd></div>
+                  <div><dt>Payment type</dt><dd>{receiptSale.payment_type === 'installment' ? 'Installment' : [...new Set(receiptPayments.map((p) => paymentMethodLabels[p.method]))].join(' + ') || paymentMethodLabels[receiptSale.payment_type]}</dd></div>
+                </dl>
+              </div>
+
+              <div className="dr-table-scroll">
+                <table className="dr-table">
+                  <caption className="dr-label">Items delivered</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" className="dr-item-no">#</th>
+                      <th scope="col">Description</th>
+                      <th scope="col" className="dr-num">Sacks</th>
+                      <th scope="col" className="dr-num">Price / sack</th>
+                      {receiptHasDiscount ? <th scope="col" className="dr-num">Discount</th> : null}
+                      <th scope="col" className="dr-num">Amount</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="dr-total">
-                Total <strong>{formatPhp(receiptSale.total)}</strong>
-              </p>
-              <p>
-                Paid {formatPhp(receiptSale.amount_paid)} · Balance {formatPhp(receiptSale.balance)}
-              </p>
-              <p className="faint">Payment: {receiptSale.payment_type}</p>
-            </div>
+                  </thead>
+                  <tbody>
+                    {receiptItems.map((item, index) => (
+                      <tr key={item.id}>
+                        <td className="dr-item-no">{index + 1}</td>
+                        <td>{item.source_description || (item.sku ? skuLabel(item.sku) : item.sku_id)}</td>
+                        <td className="dr-num">{formatQty(item.sacks)}</td>
+                        <td className="dr-num">{formatPhp(item.price_per_sack)}</td>
+                        {receiptHasDiscount ? <td className="dr-num">{formatPhp(item.discount)}</td> : null}
+                        <td className="dr-num"><strong>{formatPhp(item.line_total)}</strong></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row" colSpan={2}>Total sacks</th>
+                      <td className="dr-num">{formatQty(receiptSacks)}</td>
+                      <td colSpan={receiptHasDiscount ? 3 : 2} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <div className="dr-settlement">
+                <section className="dr-payments" aria-label="Payment details">
+                  <h3 className="dr-label">Payment details</h3>
+                  {receiptPayments.length ? (
+                    <ul className="dr-payment-list">
+                      {receiptPayments.map((payment) => (
+                        <li key={payment.id}>
+                          <div>
+                            <strong>{paymentMethodLabels[payment.method]}</strong>
+                            <span>{formatDate(payment.payment_date)}</span>
+                            {payment.reference_no ? <span>Reference: {payment.reference_no}</span> : null}
+                          </div>
+                          <strong className="dr-payment-amount">{formatPhp(payment.amount)}</strong>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <p className="dr-muted">No individual payment records available.</p>}
+                  {receiptSale.notes ? (
+                    <div className="dr-notes">
+                      <h3 className="dr-label">Remarks</h3>
+                      <p>{receiptSale.notes}</p>
+                    </div>
+                  ) : null}
+                </section>
+
+                <section className="dr-summary" aria-label="Amount summary">
+                  <h3 className="dr-label">Amount summary</h3>
+                  <dl>
+                    <div><dt>Subtotal</dt><dd>{formatPhp(receiptSale.subtotal)}</dd></div>
+                    <div><dt>Discount</dt><dd>{Number(receiptSale.discount) > 0 ? '− ' : ''}{formatPhp(receiptSale.discount)}</dd></div>
+                    <div className="dr-grand-total"><dt>Total amount</dt><dd>{formatPhp(receiptSale.total)}</dd></div>
+                    <div className="dr-paid"><dt>Amount paid</dt><dd>{formatPhp(receiptSale.amount_paid)}</dd></div>
+                    <div className={`dr-balance is-${receiptStatus}`}>
+                      <dt>Balance due</dt><dd>{formatPhp(receiptSale.balance)}</dd>
+                    </div>
+                  </dl>
+                  <p className="dr-summary-note">{receiptStatus === 'voided' ? 'This sale has been voided.' : receiptStatus === 'paid' ? 'No outstanding balance.' : 'Outstanding balance as of this receipt.'}</p>
+                </section>
+              </div>
+
+              <footer className="dr-footer">
+                <div className="dr-signatures">
+                  <div><span>Released by</span><small>Signature over printed name</small></div>
+                  <div><span>Received by</span><small>Signature over printed name · Date</small></div>
+                </div>
+                <p>Thank you for choosing {settings?.name ?? 'JMG Commodities Inc.'}.</p>
+              </footer>
+            </article>
           ) : (
             <div className="empty-state">Save a sale to generate a Delivery Receipt.</div>
           )}

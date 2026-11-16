@@ -478,14 +478,123 @@
   margin-top: auto;
 }
 
-/* ── Recent vouchers ──────────────────────────────────────── */
-.pcf-voucher-search {
-  max-width: 340px;
-  margin-bottom: 14px;
+.pcf-summary-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
-.pcf-voucher-search .ui-input {
-  min-height: 44px;
+.pcf-summary-head p {
+  margin: 6px 0 0;
+  color: var(--color-ink-faint);
+  font-size: 0.82rem;
+}
+
+.pcf-summary-total {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pcf-summary-total strong {
+  font-family: var(--font-display);
+  font-size: 1.8rem;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+
+.pcf-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 28px;
+}
+
+.pcf-summary-grid section {
+  min-width: 0;
+}
+
+.pcf-summary-grid h3 {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
+
+.pcf-summary-caption {
+  margin: 0 0 18px;
+  color: var(--color-ink-faint);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.pcf-expense-bars,
+.pcf-expense-descriptions {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pcf-expense-bar-head,
+.pcf-expense-descriptions li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.pcf-expense-label {
+  min-width: 0;
+  flex: 1 1 160px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.pcf-expense-amount {
+  margin-left: auto;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pcf-expense-track {
+  height: 9px;
+  margin: 8px 0 5px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-neutral-soft);
+}
+
+.pcf-expense-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-jade);
+}
+
+.pcf-expense-meta {
+  color: var(--color-ink-faint);
+  font-size: 0.75rem;
+}
+
+.pcf-expense-descriptions li {
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pcf-expense-descriptions .pcf-expense-meta {
+  flex-basis: 100%;
+}
+
+@media (max-width: 900px) {
+  .pcf-summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .pcf-cell-ref {

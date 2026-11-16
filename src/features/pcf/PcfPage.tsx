@@ -305,16 +305,28 @@ export function PcfPage() {
     [voucherNumbers],
   )
 
-  const recentVouchers = useMemo(
-    () =>
-      vouchers.filter(
-        (v) =>
-          !searchTerm ||
-          v.payee.toLowerCase().includes(searchTerm) ||
-          (v.purpose ?? '').toLowerCase().includes(searchTerm),
-      ),
-    [vouchers, searchTerm],
-  )
+  const expenseSummary = useMemo(() => {
+    const categories = new Map<string, { label: string; amount: number; count: number }>()
+    const descriptions = new Map<string, { label: string; amount: number; count: number }>()
+    for (const voucher of currentPeriodVouchers) {
+      const amount = Number(voucher.amount)
+      const classification = pcfClassification(voucher.category)
+      const category = categories.get(classification) ?? { label: classification, amount: 0, count: 0 }
+      category.amount += amount
+      category.count += 1
+      categories.set(classification, category)
+      const label = voucher.payee.trim()
+      const key = label.toLowerCase()
+      const description = descriptions.get(key) ?? { label, amount: 0, count: 0 }
+      description.amount += amount
+      description.count += 1
+      descriptions.set(key, description)
+    }
+    return {
+      categories: [...categories.values()].sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label)),
+      descriptions: [...descriptions.values()].sort((a, b) => b.amount - a.amount || a.label.localeCompare(b.label)).slice(0, 5),
+    }
+  }, [currentPeriodVouchers])
 
   const filteredVouchers = useMemo(
     () =>
@@ -335,7 +347,6 @@ export function PcfPage() {
     [filteredVouchers],
   )
 
-  const recentPager = usePaged(recentVouchers, 10)
   const voucherPager = usePaged(filteredVouchers, 15)
   const replenishPager = usePaged(replenishments, 10)
 
@@ -707,8 +718,8 @@ export function PcfPage() {
               ))}
             </SelectInput>
           ) : null}
-          <Button variant="secondary" onClick={onPrintReport}>
-            Print report
+          <Button variant="secondary" onClick={onPrintReport} disabled={!selectedFund || loading}>
+            Print monitoring report
           </Button>
           {canRequest ? (
             <Button variant="secondary" onClick={() => navigate('/app/fund-requests?tab=rfh')}>
@@ -824,65 +835,83 @@ export function PcfPage() {
                 </section>
               </div>
 
-              <Card title="Recent vouchers">
-                <div className="pcf-voucher-search">
-                  <TextInput
-                    type="search"
-                    placeholder="Search payee or purpose"
-                    value={voucherSearch}
-                    onChange={(e) => setVoucherSearch(e.target.value)}
-                    aria-label="Search vouchers"
-                  />
-                </div>
-                {recentVouchers.length === 0 ? (
-                  <div className="empty-state">
-                    {vouchers.length === 0 ? 'No vouchers yet.' : 'No vouchers match your search.'}
+              <Card
+                title="Expense summary"
+                subtitle="Spending on the current expense sheet. Closed sheets are in Report."
+                action={
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setVoucherSearch('')
+                      setVoucherCategory('')
+                      setTab('vouchers')
+                    }}
+                  >
+                    View expenses
+                  </Button>
+                }
+              >
+                <div className="pcf-summary-head">
+                  <div>
+                    <span className="pcf-sheet-badge">{openPeriod?.label ?? 'NEW SHEET'}</span>
+                    <p>
+                      {openPeriod
+                        ? `${longDate(openPeriod.start_date)} - ${longDate(openPeriod.end_date ?? todayInputValue())}`
+                        : 'Expenses before the first sheet cut'}
+                    </p>
                   </div>
+                  <div className="pcf-summary-total">
+                    <span className="pcf-eyebrow">Sheet expenses</span>
+                    <strong>{formatPhp(currentPeriodTotal)}</strong>
+                    <span className="pcf-expense-meta">
+                      {currentPeriodVouchers.length} entr{currentPeriodVouchers.length === 1 ? 'y' : 'ies'}
+                    </span>
+                  </div>
+                </div>
+                {currentPeriodVouchers.length === 0 ? (
+                  <div className="empty-state">No expenses in this sheet yet.</div>
                 ) : (
-                  <Table>
-                    <thead>
-                      <tr>
-                        <th>Voucher</th>
-                        <th>Date</th>
-                        <th>Payee</th>
-                        <th>Purpose</th>
-                        <th>Category</th>
-                        <th>Amount</th>
-                        <th>Receipt</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentPager.pageItems.map((v) => (
-                        <tr key={v.id}>
-                          <td className="pcf-cell-ref">{voucherRef(v)}</td>
-                          <td>{formatDate(v.voucher_date)}</td>
-                          <td className="pcf-cell-primary">{v.payee}</td>
-                          <td>{v.purpose ?? '—'}</td>
-                          <td>{v.category ?? '—'}</td>
-                          <td className="pcf-cell-amount">{formatPhp(v.amount)}</td>
-                          <td>{receiptCell(v)}</td>
-                          <td>
-                            <span className={`pcf-status${unrecoveredIds.has(v.id) ? ' is-pending' : ''}`}>
-                              {unrecoveredIds.has(v.id) ? 'Not replenished' : 'Replenished'}
+                  <div className="pcf-summary-grid">
+                    <section aria-label="Expenses by classification">
+                      <h3>By classification</h3>
+                      <p className="pcf-summary-caption">Each bar shows its share of total sheet expenses.</p>
+                      <ul className="pcf-expense-bars">
+                        {expenseSummary.categories.map((category) => {
+                          const share = currentPeriodTotal > 0 ? category.amount / currentPeriodTotal * 100 : 0
+                          return (
+                            <li key={category.label}>
+                              <div className="pcf-expense-bar-head">
+                                <span className="pcf-expense-label">{category.label}</span>
+                                <strong className="pcf-expense-amount">{formatPhp(category.amount)}</strong>
+                              </div>
+                              <div className="pcf-expense-track" aria-hidden="true">
+                                <span style={{ width: `${share}%` }} />
+                              </div>
+                              <span className="pcf-expense-meta">
+                                {share.toFixed(1)}% · {category.count} entr{category.count === 1 ? 'y' : 'ies'}
+                              </span>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </section>
+                    <section aria-label="Largest expense descriptions">
+                      <h3>Largest expense descriptions</h3>
+                      <p className="pcf-summary-caption">Top five descriptions, with repeated entries combined.</p>
+                      <ol className="pcf-expense-descriptions">
+                        {expenseSummary.descriptions.map((description) => (
+                          <li key={description.label}>
+                            <span className="pcf-expense-label">{description.label}</span>
+                            <strong className="pcf-expense-amount">{formatPhp(description.amount)}</strong>
+                            <span className="pcf-expense-meta">
+                              {description.count} entr{description.count === 1 ? 'y' : 'ies'}
                             </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </Table>
+                          </li>
+                        ))}
+                      </ol>
+                    </section>
+                  </div>
                 )}
-                <Pagination
-                  page={recentPager.page}
-                  pageCount={recentPager.pageCount}
-                  pageSize={recentPager.pageSize}
-                  total={recentPager.total}
-                  start={recentPager.start}
-                  end={recentPager.end}
-                  onPage={recentPager.setPage}
-                  onPageSize={recentPager.setPageSize}
-                  noun="voucher"
-                />
               </Card>
             </>
           ) : (
@@ -1061,9 +1090,6 @@ export function PcfPage() {
               </Button>
               <Button variant="secondary" onClick={() => void exportExpensesCsv()}>
                 Export CSV
-              </Button>
-              <Button variant="ghost" onClick={printPage}>
-                Print / PDF
               </Button>
             </div>
 
