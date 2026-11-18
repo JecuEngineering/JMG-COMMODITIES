@@ -7,12 +7,14 @@ export async function writeAuditLog(params: {
   oldValue?: Record<string, unknown> | null
   newValue?: Record<string, unknown> | null
 }): Promise<void> {
+  // getSession reads local storage; getUser would hit the auth server and
+  // sign the operator out if that session was revoked from another device.
   const {
-    data: { user },
-  } = await supabase.auth.getUser()
+    data: { session },
+  } = await supabase.auth.getSession()
 
   const { error } = await supabase.from('audit_log').insert({
-    user_id: user?.id ?? null,
+    user_id: session?.user.id ?? null,
     action: params.action,
     table_name: params.tableName,
     record_id: params.recordId ?? null,

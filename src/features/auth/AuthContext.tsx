@@ -28,6 +28,8 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 const IDLE_TIMEOUT_MS = 5 * 60_000
 const IDLE_CHECK_MS = 20_000
+const ACTIVITY_SHARE_MS = 5_000
+const ACTIVITY_STORAGE_KEY = 'jmg:last-activity'
 const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel', 'scroll'] as const
 
 function describeAuthError(message: string): string {
@@ -168,12 +170,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {}
   }, [])
 
+  // Local scope: a shared branch account is often open on several devices, and
+  // the default global scope would revoke every one of them.
   const signOut = useCallback(async () => {
-    try {
-      await supabase.auth.signOut()
-    } catch {
-      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
-    }
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
     profileUserIdRef.current = null
     accessTokenRef.current = null
     setProfile(null)
@@ -207,22 +207,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Sign the operator out after five minutes without keyboard, mouse, or touch
   // input. Background timers are throttled, so a hidden tab is also checked as
-  // soon as it becomes visible again.
+  // soon as it becomes visible again. Activity is shared through localStorage:
+  // tabs share one session, so an idle background tab must not sign out a tab
+  // that is still in use.
   useEffect(() => {
     if (!userId) return
     let lastActivity = Date.now()
+    let lastShared = 0
     let signedOut = false
+
+    const share = (at: number) => {
+      lastShared = at
+      try {
+        localStorage.setItem(ACTIVITY_STORAGE_KEY, String(at))
+      } catch {
+        // storage unavailable (private mode); fall back to this tab only
+      }
+    }
+
+    const latestActivity = () => {
+      const stored = Number(localStorage.getItem(ACTIVITY_STORAGE_KEY) ?? 0)
+      return Math.max(lastActivity, Number.isFinite(stored) ? stored : 0)
+    }
 
     const touch = () => {
       lastActivity = Date.now()
+      if (lastActivity - lastShared > ACTIVITY_SHARE_MS) share(lastActivity)
     }
 
     const checkIdle = () => {
-      if (signedOut || Date.now() - lastActivity < IDLE_TIMEOUT_MS) return
+      if (signedOut || Date.now() - latestActivity() < IDLE_TIMEOUT_MS) return
       signedOut = true
       void signOut()
     }
 
+    share(lastActivity)
     for (const event of ACTIVITY_EVENTS) {
       window.addEventListener(event, touch, { passive: true, capture: true })
     }
