@@ -18,7 +18,7 @@ import {
 } from '../pcf/pcfApi'
 import { ReceiptPreview } from '../pcf/ReceiptPreview'
 import '../pcf/pcf.css'
-import { createFundRequest } from './fundRequestsApi'
+import { createFundRequest, type FundRequestType } from './fundRequestsApi'
 
 function monthStart() {
   const d = new Date()
@@ -41,28 +41,47 @@ function longDate(date: string) {
 
 interface RequestLine {
   id: string
+  unit: string
   description: string
   amount: string
 }
 
 let lineSeq = 0
-function newLine(): RequestLine {
+function newLine(defaults?: Partial<Pick<RequestLine, 'unit' | 'description'>>): RequestLine {
   lineSeq += 1
-  return { id: `rfh-line-${lineSeq}`, description: '', amount: '' }
+  return {
+    id: `rfh-line-${lineSeq}`,
+    unit: defaults?.unit ?? '',
+    description: defaults?.description ?? '',
+    amount: '',
+  }
+}
+
+const TYPE_LABELS: Record<FundRequestType, string> = {
+  cash_advance: 'Cash advance',
+  reimbursement: 'Reimbursement',
+  purchase: 'Purchase',
+  other: 'Other',
 }
 
 export function RequestFundPanel({
   funds,
   onCreated,
+  mode = 'replenish',
+  onCancel,
 }: {
   funds: PcfFundBalance[]
   onCreated?: () => void | Promise<void>
+  /** replenish = Petty cash RFH (pulls expenses). manual = New request (typed unit/item lines). */
+  mode?: 'replenish' | 'manual'
+  onCancel?: () => void
 }) {
   const { user } = useAuth()
   const { settings } = useCompanySettings()
   const role = user!.profile.role
   const branchId = user!.profile.branch_id
   const canCreate = canCreateFundRequest(role) && Boolean(branchId)
+  const isManual = mode === 'manual'
 
   const visibleFunds = useMemo(
     () => (branchId ? funds.filter((f) => f.branch_id === branchId) : funds),
@@ -73,7 +92,8 @@ export function RequestFundPanel({
   const [vouchers, setVouchers] = useState<PcfVoucher[]>([])
   const [replenishments, setReplenishments] = useState<PcfReplenishment[]>([])
   const [requestNo, setRequestNo] = useState<string | null>(null)
-  const [purpose, setPurpose] = useState('PETTY CASH REPLENISHMENT')
+  const [purpose, setPurpose] = useState(isManual ? '' : 'PETTY CASH REPLENISHMENT')
+  const [requestType, setRequestType] = useState<FundRequestType>('cash_advance')
   const [from, setFrom] = useState<string | null>(null)
   const [to, setTo] = useState<string | null>(null)
   const [funding, setFunding] = useState<string | null>(null)
@@ -94,7 +114,7 @@ export function RequestFundPanel({
   const fund = visibleFunds.find((f) => f.id === fundId) ?? null
 
   const loadFund = useCallback(async (id: string) => {
-    if (!id) {
+    if (!id || isManual) {
       setVouchers([])
       setReplenishments([])
       return
@@ -106,7 +126,7 @@ export function RequestFundPanel({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
-  }, [])
+  }, [isManual])
 
   useEffect(() => {
     void loadFund(fundId)
@@ -116,17 +136,20 @@ export function RequestFundPanel({
     from ?? (replenishments[0] ? addDays(replenishments[0].replenishment_date, 1) : monthStart())
   const toValue = to ?? todayInputValue()
   const fundingValue = funding == null ? Number(fund?.fund_amount ?? 0) : Number(funding) || 0
+  const branchLabel = fund?.branch_name ?? user!.profile.branch?.name ?? 'Branch'
   const requestNoValue =
     requestNo ??
-    `RFH-${(fund?.branch_name ?? 'PCF').replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}-${todayInputValue().replace(/-/g, '')}`
+    `RFH-${branchLabel.replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase()}-${todayInputValue().replace(/-/g, '')}`
 
   const periodVouchers = useMemo(
     () =>
-      vouchers
-        .filter((v) => v.voucher_date >= fromValue && v.voucher_date <= toValue)
-        .slice()
-        .sort((a, b) => a.voucher_date.localeCompare(b.voucher_date)),
-    [vouchers, fromValue, toValue],
+      isManual
+        ? []
+        : vouchers
+            .filter((v) => v.voucher_date >= fromValue && v.voucher_date <= toValue)
+            .slice()
+            .sort((a, b) => a.voucher_date.localeCompare(b.voucher_date)),
+    [vouchers, fromValue, toValue, isManual],
   )
 
   const categoryRows = useMemo(() => {
@@ -139,7 +162,13 @@ export function RequestFundPanel({
   }, [periodVouchers])
 
   const filledLines = useMemo(
-    () => lines.filter((l) => l.description.trim() !== '' || (Number(l.amount) || 0) > 0),
+    () =>
+      lines.filter(
+        (l) =>
+          l.unit.trim() !== '' ||
+          l.description.trim() !== '' ||
+          (Number(l.amount) || 0) > 0,
+      ),
     [lines],
   )
 
@@ -147,9 +176,12 @@ export function RequestFundPanel({
   const linesTotal = filledLines.reduce((sum, l) => sum + (Number(l.amount) || 0), 0)
   const requestTotal = vouchersTotal + linesTotal
 
-  const branchLabel = fund?.branch_name ?? 'PCF'
   const companyName = settings?.name ?? 'JMG Commodities Inc.'
   const logoSrc = settings?.logo_url ?? '/JMG COMMODITIES.jpeg'
+
+  function updateLine(id: string, patch: Partial<RequestLine>) {
+    setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)))
+  }
 
   function exportExcel() {
     downloadExcel(
@@ -157,13 +189,25 @@ export function RequestFundPanel({
       'Request for Fund',
       ['Unit / Item', 'Description', 'Amount'],
       [
-        [branchLabel, 'PETTY CASH REPLENISHMENT', ''],
-        ['', `EXPENSE INCURRED ${longDate(fromValue)} - ${longDate(toValue)}`, ''],
-        ...categoryRows.map(([name, amount]) => ['', name, Number(amount).toFixed(2)]),
-        ...filledLines.map((l) => ['', l.description.trim(), (Number(l.amount) || 0).toFixed(2)]),
+        ...(isManual
+          ? []
+          : ([
+              [branchLabel, 'PETTY CASH REPLENISHMENT', ''],
+              ['', `EXPENSE INCURRED ${longDate(fromValue)} - ${longDate(toValue)}`, ''],
+              ...categoryRows.map(([name, amount]) => ['', name, Number(amount).toFixed(2)]),
+            ] as [string, string, string][])),
+        ...filledLines.map((l) => [
+          l.unit.trim() || (isManual ? branchLabel : ''),
+          l.description.trim(),
+          (Number(l.amount) || 0).toFixed(2),
+        ]),
         ['', 'TOTAL EXPENSE', requestTotal.toFixed(2)],
-        ['', 'PCF FUNDING', fundingValue.toFixed(2)],
-        ['', 'BALANCE', (fundingValue - requestTotal).toFixed(2)],
+        ...(!isManual
+          ? ([
+              ['', 'PCF FUNDING', fundingValue.toFixed(2)],
+              ['', 'BALANCE', (fundingValue - requestTotal).toFixed(2)],
+            ] as [string, string, string][])
+          : []),
         ['', 'FOR REQUEST', requestTotal.toFixed(2)],
         ['', 'Requested by', `${user!.profile.full_name} (${ROLE_LABELS[role]})`],
         ['', 'Approved by', approvedBy],
@@ -175,7 +219,11 @@ export function RequestFundPanel({
   async function onCreateDraft() {
     setError(null)
     setMessage(null)
-    if (!fund) {
+    if (!branchId) {
+      setError('Your account has no branch assigned.')
+      return
+    }
+    if (!isManual && !fund) {
       setError('No petty cash fund is set up for your branch.')
       return
     }
@@ -183,25 +231,41 @@ export function RequestFundPanel({
       setError('Enter the purpose of the request.')
       return
     }
+    if (isManual) {
+      const incomplete = filledLines.some(
+        (l) => !l.unit.trim() || !l.description.trim() || !(Number(l.amount) > 0),
+      )
+      if (filledLines.length === 0 || incomplete) {
+        setError('Add at least one line with unit/item, description, and amount.')
+        return
+      }
+    }
     if (!Number.isFinite(requestTotal) || requestTotal <= 0) {
-      setError('There is nothing to request for this period.')
+      setError(isManual ? 'Enter amounts greater than zero.' : 'There is nothing to request for this period.')
       return
     }
     setSaving(true)
     try {
+      const notes = isManual
+        ? `${requestNoValue} · ${filledLines
+            .map((l) => `${l.unit.trim()}: ${l.description.trim()} ${formatPhp(Number(l.amount) || 0)}`)
+            .join(' · ')}`
+        : `${requestNoValue} · PCF vouchers ${fromValue} to ${toValue} · Vouchers ${formatPhp(vouchersTotal)} + additional lines ${formatPhp(linesTotal)}`
+
       await createFundRequest({
         requesterId: user!.id,
-        branchId: fund.branch_id,
+        branchId: isManual ? branchId : fund!.branch_id,
         purpose: purpose.trim(),
-        category: 'Other',
-        requestType: 'cash_advance',
+        category: isManual ? 'Other' : 'Other',
+        requestType: isManual ? requestType : 'cash_advance',
         amount: requestTotal,
-        notes: `${requestNoValue} · PCF vouchers ${fromValue} to ${toValue} · Vouchers ${formatPhp(vouchersTotal)} + additional lines ${formatPhp(linesTotal)}`,
+        notes,
       })
       setMessage(
         `Draft fund request created for ${formatPhp(requestTotal)}. Open My requests to submit it for review.`,
       )
       setLines([newLine()])
+      if (isManual) setPurpose('')
       await onCreated?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -210,7 +274,7 @@ export function RequestFundPanel({
     }
   }
 
-  if (visibleFunds.length === 0) {
+  if (!isManual && visibleFunds.length === 0) {
     return (
       <Card title="Request for fund">
         <div className="empty-state">
@@ -226,9 +290,17 @@ export function RequestFundPanel({
       {error ? <div className="error-banner">{error}</div> : null}
       {message ? <div className="success-banner">{message}</div> : null}
 
-      <Card title="Request details" className="no-print">
+      <Card
+        title={isManual ? 'New fund request' : 'Request details'}
+        className="no-print"
+        subtitle={
+          isManual
+            ? 'Same Request for Fund form — you type the unit/item, description and amount.'
+            : undefined
+        }
+      >
         <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
-          {visibleFunds.length > 1 ? (
+          {!isManual && visibleFunds.length > 1 ? (
             <Field label="Branch fund" htmlFor="rfh-fund">
               <SelectInput id="rfh-fund" value={fundId} onChange={(e) => setFundId(e.target.value)}>
                 {visibleFunds.map((f) => (
@@ -242,23 +314,47 @@ export function RequestFundPanel({
           <Field label="RFH #" htmlFor="rfh-no">
             <TextInput id="rfh-no" value={requestNoValue} onChange={(e) => setRequestNo(e.target.value)} />
           </Field>
+          {isManual ? (
+            <Field label="Request type" htmlFor="rfh-type">
+              <SelectInput
+                id="rfh-type"
+                value={requestType}
+                onChange={(e) => setRequestType(e.target.value as FundRequestType)}
+              >
+                {(Object.keys(TYPE_LABELS) as FundRequestType[]).map((t) => (
+                  <option key={t} value={t}>
+                    {TYPE_LABELS[t]}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+          ) : null}
           <Field label="Purpose" htmlFor="rfh-purpose">
-            <TextInput id="rfh-purpose" value={purpose} onChange={(e) => setPurpose(e.target.value)} />
-          </Field>
-          <Field label="Expenses from" htmlFor="rfh-from">
-            <DateInput id="rfh-from" value={fromValue} onChange={setFrom} />
-          </Field>
-          <Field label="Expenses to" htmlFor="rfh-to">
-            <DateInput id="rfh-to" value={toValue} onChange={setTo} />
-          </Field>
-          <Field label="PCF funding (₱)" htmlFor="rfh-funding">
             <TextInput
-              id="rfh-funding"
-              inputMode="decimal"
-              value={funding ?? String(fund?.fund_amount ?? '')}
-              onChange={(e) => setFunding(e.target.value)}
+              id="rfh-purpose"
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
+              placeholder={isManual ? 'What is this request for?' : undefined}
             />
           </Field>
+          {!isManual ? (
+            <>
+              <Field label="Expenses from" htmlFor="rfh-from">
+                <DateInput id="rfh-from" value={fromValue} onChange={setFrom} />
+              </Field>
+              <Field label="Expenses to" htmlFor="rfh-to">
+                <DateInput id="rfh-to" value={toValue} onChange={setTo} />
+              </Field>
+              <Field label="PCF funding (₱)" htmlFor="rfh-funding">
+                <TextInput
+                  id="rfh-funding"
+                  inputMode="decimal"
+                  value={funding ?? String(fund?.fund_amount ?? '')}
+                  onChange={(e) => setFunding(e.target.value)}
+                />
+              </Field>
+            </>
+          ) : null}
           <Field label="Approved by" htmlFor="rfh-approved">
             <TextInput
               id="rfh-approved"
@@ -290,31 +386,35 @@ export function RequestFundPanel({
 
         <div className="stack" style={{ gap: 8, marginTop: 16 }}>
           <span className="field-label" style={{ marginBottom: 0 }}>
-            Additional lines — typed straight into the form
+            {isManual
+              ? 'Request lines — unit/item, description and amount'
+              : 'Additional lines — typed straight into the form'}
           </span>
           {lines.map((line) => (
-            <div key={line.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
-              <div style={{ flex: 1 }}>
+            <div key={line.id} className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              {isManual ? (
+                <div style={{ flex: '1 1 140px', minWidth: 120 }}>
+                  <TextInput
+                    value={line.unit}
+                    onChange={(e) => updateLine(line.id, { unit: e.target.value })}
+                    placeholder="Unit / item"
+                    aria-label="Unit / item"
+                  />
+                </div>
+              ) : null}
+              <div style={{ flex: '2 1 200px', minWidth: 160 }}>
                 <TextInput
                   value={line.description}
-                  onChange={(e) =>
-                    setLines((prev) =>
-                      prev.map((l) => (l.id === line.id ? { ...l, description: e.target.value } : l)),
-                    )
-                  }
+                  onChange={(e) => updateLine(line.id, { description: e.target.value })}
                   placeholder="Description"
                   aria-label="Description"
                 />
               </div>
-              <div style={{ width: 170 }}>
+              <div style={{ width: 150 }}>
                 <TextInput
                   inputMode="decimal"
                   value={line.amount}
-                  onChange={(e) =>
-                    setLines((prev) =>
-                      prev.map((l) => (l.id === line.id ? { ...l, amount: e.target.value } : l)),
-                    )
-                  }
+                  onChange={(e) => updateLine(line.id, { amount: e.target.value })}
                   placeholder="Amount (₱)"
                   aria-label="Amount"
                 />
@@ -339,12 +439,20 @@ export function RequestFundPanel({
         </div>
 
         <p className="faint" style={{ marginTop: 10 }}>
-          {periodVouchers.length} voucher(s) in range
-          {filledLines.length > 0 ? ` + ${filledLines.length} typed line(s)` : ''} · Total{' '}
-          {formatPhp(requestTotal)} · Balance {formatPhp(fundingValue - requestTotal)}
+          {isManual ? (
+            <>
+              {filledLines.length} line(s) · Total {formatPhp(requestTotal)}
+            </>
+          ) : (
+            <>
+              {periodVouchers.length} voucher(s) in range
+              {filledLines.length > 0 ? ` + ${filledLines.length} typed line(s)` : ''} · Total{' '}
+              {formatPhp(requestTotal)} · Balance {formatPhp(fundingValue - requestTotal)}
+            </>
+          )}
         </p>
 
-        {periodVouchers.length > 0 ? (
+        {!isManual && periodVouchers.length > 0 ? (
           <details style={{ marginTop: 12 }}>
             <summary className="muted">Show voucher receipts in this period</summary>
             <ul className="stack" style={{ gap: 6, marginTop: 8, paddingLeft: 18 }}>
@@ -355,7 +463,10 @@ export function RequestFundPanel({
                     <Button
                       variant="ghost"
                       onClick={() =>
-                        setReceiptView({ path: v.receipt_path!, label: `${formatDate(v.voucher_date)} · ${v.payee}` })
+                        setReceiptView({
+                          path: v.receipt_path!,
+                          label: `${formatDate(v.voucher_date)} · ${v.payee}`,
+                        })
                       }
                     >
                       View receipt
@@ -381,6 +492,11 @@ export function RequestFundPanel({
           <Button variant="ghost" onClick={printPage}>
             Print / PDF
           </Button>
+          {onCancel ? (
+            <Button variant="ghost" onClick={onCancel}>
+              Cancel
+            </Button>
+          ) : null}
         </div>
         <p className="faint" style={{ marginTop: 8 }}>
           A4 portrait. The browser print dialog lists every installed printer — choose the EPSON
@@ -409,7 +525,7 @@ export function RequestFundPanel({
           </div>
         </div>
         <div className="pcf-sheet-purpose">
-          <strong>DESCRIPTION/ PURPOSE:</strong> <span>{purpose}</span>
+          <strong>DESCRIPTION/ PURPOSE:</strong> <span>{purpose || '—'}</span>
         </div>
 
         <table className="pcf-form-table">
@@ -421,49 +537,80 @@ export function RequestFundPanel({
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td rowSpan={categoryRows.length + filledLines.length + 1} className="pcf-unit">
-                {branchLabel}
-                <br />
-                PETTY CASH
-                <br />
-                REPLENISHMENT
-              </td>
-              <td className="pcf-period">
-                EXPENSE INCURRED {longDate(fromValue)} - {longDate(toValue)}
-              </td>
-              <td />
-            </tr>
-            {categoryRows.map(([name, amount]) => (
-              <tr key={name}>
-                <td>{name.toUpperCase()}</td>
-                <td className="pcf-num">{formatPhp(amount)}</td>
-              </tr>
-            ))}
-            {filledLines.map((line) => (
-              <tr key={line.id}>
-                <td>{line.description.trim().toUpperCase()}</td>
-                <td className="pcf-num">{formatPhp(Number(line.amount) || 0)}</td>
-              </tr>
-            ))}
-            {categoryRows.length === 0 && filledLines.length === 0 ? (
+            {isManual ? (
+              filledLines.length === 0 ? (
+                <tr>
+                  <td className="muted">—</td>
+                  <td className="muted">Add lines above.</td>
+                  <td className="pcf-num">{formatPhp(0)}</td>
+                </tr>
+              ) : (
+                filledLines.map((line) => (
+                  <tr key={line.id}>
+                    <td className="pcf-unit">{line.unit.trim().toUpperCase()}</td>
+                    <td>{line.description.trim().toUpperCase()}</td>
+                    <td className="pcf-num">{formatPhp(Number(line.amount) || 0)}</td>
+                  </tr>
+                ))
+              )
+            ) : (
+              <>
+                <tr>
+                  <td rowSpan={categoryRows.length + filledLines.length + 1} className="pcf-unit">
+                    {branchLabel}
+                    <br />
+                    PETTY CASH
+                    <br />
+                    REPLENISHMENT
+                  </td>
+                  <td className="pcf-period">
+                    EXPENSE INCURRED {longDate(fromValue)} - {longDate(toValue)}
+                  </td>
+                  <td />
+                </tr>
+                {categoryRows.map(([name, amount]) => (
+                  <tr key={name}>
+                    <td>{name.toUpperCase()}</td>
+                    <td className="pcf-num">{formatPhp(amount)}</td>
+                  </tr>
+                ))}
+                {filledLines.map((line) => (
+                  <tr key={line.id}>
+                    <td>{line.description.trim().toUpperCase()}</td>
+                    <td className="pcf-num">{formatPhp(Number(line.amount) || 0)}</td>
+                  </tr>
+                ))}
+                {categoryRows.length === 0 && filledLines.length === 0 ? (
+                  <tr>
+                    <td className="muted">No expenses in this period.</td>
+                    <td className="pcf-num">{formatPhp(0)}</td>
+                  </tr>
+                ) : null}
+              </>
+            )}
+            {isManual ? (
               <tr>
-                <td className="muted">No expenses in this period.</td>
-                <td className="pcf-num">{formatPhp(0)}</td>
+                <td className="pcf-right pcf-strong" colSpan={2}>
+                  TOTAL EXPENSE
+                </td>
+                <td className="pcf-num pcf-strong">{formatPhp(requestTotal)}</td>
               </tr>
-            ) : null}
-            <tr>
-              <td className="pcf-right pcf-strong">TOTAL EXPENSE</td>
-              <td className="pcf-num pcf-strong">{formatPhp(requestTotal)}</td>
-            </tr>
-            <tr>
-              <td className="pcf-right">PCF FUNDING</td>
-              <td className="pcf-num">{formatPhp(fundingValue)}</td>
-            </tr>
-            <tr>
-              <td className="pcf-right pcf-strong pcf-red">BALANCE</td>
-              <td className="pcf-num pcf-strong pcf-red">{formatPhp(fundingValue - requestTotal)}</td>
-            </tr>
+            ) : (
+              <>
+                <tr>
+                  <td className="pcf-right pcf-strong">TOTAL EXPENSE</td>
+                  <td className="pcf-num pcf-strong">{formatPhp(requestTotal)}</td>
+                </tr>
+                <tr>
+                  <td className="pcf-right">PCF FUNDING</td>
+                  <td className="pcf-num">{formatPhp(fundingValue)}</td>
+                </tr>
+                <tr>
+                  <td className="pcf-right pcf-strong pcf-red">BALANCE</td>
+                  <td className="pcf-num pcf-strong pcf-red">{formatPhp(fundingValue - requestTotal)}</td>
+                </tr>
+              </>
+            )}
             <tr className="pcf-for-request">
               <td />
               <td className="pcf-right pcf-strong">FOR REQUEST</td>

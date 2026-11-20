@@ -115,6 +115,7 @@ export function PcfPage() {
   const [receiptView, setReceiptView] = useState<{ path: string; label: string } | null>(null)
   const [voucherSearch, setVoucherSearch] = useState('')
   const [voucherCategory, setVoucherCategory] = useState('')
+  const [voucherSort, setVoucherSort] = useState<'asc' | 'desc'>('desc')
 
   // Replenishment form
   const [rAmount, setRAmount] = useState('')
@@ -329,19 +330,21 @@ export function PcfPage() {
     }
   }, [currentPeriodVouchers])
 
-  const filteredVouchers = useMemo(
-    () =>
-      currentPeriodVouchers.filter((v) => {
-        if (voucherCategory && pcfClassification(v.category) !== voucherCategory) return false
-        if (!searchTerm) return true
-        return (
-          v.payee.toLowerCase().includes(searchTerm) ||
-          (v.purpose ?? '').toLowerCase().includes(searchTerm) ||
-          (v.voucher_no ?? '').toLowerCase().includes(searchTerm)
-        )
-      }),
-    [currentPeriodVouchers, voucherCategory, searchTerm],
-  )
+  const filteredVouchers = useMemo(() => {
+    const list = currentPeriodVouchers.filter((v) => {
+      if (voucherCategory && pcfClassification(v.category) !== voucherCategory) return false
+      if (!searchTerm) return true
+      return (
+        v.payee.toLowerCase().includes(searchTerm) ||
+        (v.purpose ?? '').toLowerCase().includes(searchTerm) ||
+        (v.voucher_no ?? '').toLowerCase().includes(searchTerm)
+      )
+    })
+    return list.slice().sort((a, b) => {
+      const cmp = byVoucherOrder(a, b)
+      return voucherSort === 'asc' ? cmp : -cmp
+    })
+  }, [currentPeriodVouchers, voucherCategory, searchTerm, voucherSort])
 
   const filteredVoucherTotal = useMemo(
     () => filteredVouchers.reduce((sum, v) => sum + Number(v.amount), 0),
@@ -1074,6 +1077,16 @@ export function PcfPage() {
                       {c}
                     </option>
                   ))}
+                </SelectInput>
+              </Field>
+              <Field label="Sort by date" htmlFor="pcf-ex-sort">
+                <SelectInput
+                  id="pcf-ex-sort"
+                  value={voucherSort}
+                  onChange={(e) => setVoucherSort(e.target.value === 'asc' ? 'asc' : 'desc')}
+                >
+                  <option value="desc">Newest first (descending)</option>
+                  <option value="asc">Oldest first (ascending)</option>
                 </SelectInput>
               </Field>
               <Field label="Search" htmlFor="pcf-ex-search">

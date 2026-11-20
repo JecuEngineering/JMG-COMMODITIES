@@ -60,6 +60,21 @@ function formatQty(value: number): string {
   return Number(value).toLocaleString('en-PH', { maximumFractionDigits: 3 })
 }
 
+interface SaleCartLine {
+  id: string
+  skuId: string
+  label: string
+  sacks: number
+  pricePerSack: number
+  lineTotal: number
+}
+
+let cartLineSeq = 0
+function nextCartLineId() {
+  cartLineSeq += 1
+  return `sale-line-${cartLineSeq}`
+}
+
 function paymentInfo(sale: Sale) {
   const payments = sale.payments ?? []
   const methods = new Set(payments.map((p) => p.method))
@@ -101,6 +116,7 @@ export function SalesPage() {
   const [sackSize, setSackSize] = useState<5 | 25 | 50>(25)
   const [sacks, setSacks] = useState('20')
   const [price, setPrice] = useState('')
+  const [cart, setCart] = useState<SaleCartLine[]>([])
   const [paymentType, setPaymentType] = useState<PaymentMethod>('cash')
   const [splitPayment, setSplitPayment] = useState(false)
   const [splitGcash, setSplitGcash] = useState('')
@@ -114,6 +130,7 @@ export function SalesPage() {
   const [historyFrom, setHistoryFrom] = useState('')
   const [historyTo, setHistoryTo] = useState('')
   const [availableStock, setAvailableStock] = useState<number | null>(null)
+  const [savingSale, setSavingSale] = useState(false)
 
   const [paySaleId, setPaySaleId] = useState('')
   const [payAmount, setPayAmount] = useState('')
@@ -134,11 +151,19 @@ export function SalesPage() {
     [skus, varietyId, sackSize],
   )
 
-  const total = useMemo(() => {
+  const draftLineTotal = useMemo(() => {
     const q = Number(sacks) || 0
     const p = Number(price) || 0
     return Math.round(q * p * 100) / 100
   }, [sacks, price])
+
+  const cartTotal = useMemo(
+    () => Math.round(cart.reduce((sum, line) => sum + line.lineTotal, 0) * 100) / 100,
+    [cart],
+  )
+
+  /** Cart wins once lines are added; otherwise the current variety row is the draft total. */
+  const total = cart.length > 0 ? cartTotal : draftLineTotal
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -349,20 +374,104 @@ export function SalesPage() {
     return raw
   }
 
-  async function onSaveSale(event: FormEvent) {
-    event.preventDefault()
+  function onAddCartLine() {
     if (!canCreate || !selectedSku || !customerId) return
-    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
-    const printDr = submitter?.value === 'save-print'
     setError(null)
-    setMessage(null)
     const qty = Number(sacks)
+    const unitPrice = Number(price)
     if (!Number.isFinite(qty) || qty <= 0) {
       setError('Enter a number of sacks greater than zero.')
       return
     }
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      setError('Enter a valid price per sack.')
+      return
+    }
+    if (availableStock != null && qty > availableStock) {
+      const branchName = branches.find((b) => b.id === branchId)?.name ?? 'this branch'
+      setError(
+        `Not enough stock for ${skuLabel(selectedSku)} at ${branchName} — ${availableStock} sack(s) on hand, ${qty} requested.`,
+      )
+      return
+    }
+    const existingSame = cart.find((line) => line.skuId === selectedSku.id)
+    const alreadyQty = existingSame?.sacks ?? 0
+    if (availableStock != null && alreadyQty + qty > availableStock) {
+      setError(
+        `Cart already has ${alreadyQty} sack(s) of ${skuLabel(selectedSku)}. Only ${availableStock} on hand.`,
+      )
+      return
+    }
+    setCart((prev) => {
+      const match = prev.find((line) => line.skuId === selectedSku.id && line.pricePerSack === unitPrice)
+      if (match) {
+        const sacksNext = match.sacks + qty
+        return prev.map((line) =>
+          line.id === match.id
+            ? {
+                ...line,
+                sacks: sacksNext,
+                lineTotal: Math.round(sacksNext * unitPrice * 100) / 100,
+              }
+            : line,
+        )
+      }
+      return [
+        ...prev,
+        {
+          id: nextCartLineId(),
+          skuId: selectedSku.id,
+          label: skuLabel(selectedSku),
+          sacks: qty,
+          pricePerSack: unitPrice,
+          lineTotal: Math.round(qty * unitPrice * 100) / 100,
+        },
+      ]
+    })
+    setSacks('20')
+    setMessage(null)
+  }
+
+  async function onSaveSale(event: FormEvent) {
+    event.preventDefault()
+    if (!canCreate || !customerId) return
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
+    const printDr = submitter?.value === 'save-print'
+    setError(null)
+    setMessage(null)
+
+    let lines = cart
+    // One-click path: if nothing is in the cart yet, use the current variety row.
+    if (lines.length === 0) {
+      if (!selectedSku) {
+        setError('Add at least one rice variety to the sale.')
+        return
+      }
+      const qty = Number(sacks)
+      const unitPrice = Number(price)
+      if (!Number.isFinite(qty) || qty <= 0) {
+        setError('Enter a number of sacks greater than zero.')
+        return
+      }
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+        setError('Enter a valid price per sack.')
+        return
+      }
+      lines = [
+        {
+          id: nextCartLineId(),
+          skuId: selectedSku.id,
+          label: skuLabel(selectedSku),
+          sacks: qty,
+          pricePerSack: unitPrice,
+          lineTotal: Math.round(qty * unitPrice * 100) / 100,
+        },
+      ]
+    }
+
+    const saleTotal = Math.round(lines.reduce((sum, line) => sum + line.lineTotal, 0) * 100) / 100
     const gcashPart = Number(splitGcash || 0)
-    if (splitPayment && (!Number.isFinite(gcashPart) || gcashPart <= 0 || gcashPart >= total)) {
+    if (splitPayment && (!Number.isFinite(gcashPart) || gcashPart <= 0 || gcashPart >= saleTotal)) {
       setError('Enter a GCash amount above zero and below the sale total.')
       return
     }
@@ -377,8 +486,8 @@ export function SalesPage() {
         setError('Enter a valid down payment (0 or more).')
         return
       }
-      if (down > total) {
-        setError(`Down payment cannot be more than the sale total (${formatPhp(total)}).`)
+      if (down > saleTotal) {
+        setError(`Down payment cannot be more than the sale total (${formatPhp(saleTotal)}).`)
         return
       }
       if (!firstDueDate) {
@@ -386,32 +495,34 @@ export function SalesPage() {
         return
       }
     }
-    let onHand = availableStock
-    try {
-      onHand = await fetchAvailableStock(branchId, selectedSku.id)
-      setAvailableStock(onHand)
-    } catch {
-      // Fall back to the RPC's own stock check.
+
+    const branchName = branches.find((b) => b.id === branchId)?.name ?? 'this branch'
+    for (const line of lines) {
+      let onHand: number | null = null
+      try {
+        onHand = await fetchAvailableStock(branchId, line.skuId)
+      } catch {
+        // Fall back to the RPC's own stock check.
+      }
+      if (onHand != null && line.sacks > onHand) {
+        setError(
+          `Not enough stock for ${line.label} at ${branchName} — ${onHand} sack(s) on hand, ${line.sacks} requested. Receive stock first.`,
+        )
+        return
+      }
     }
-    if (onHand != null && qty > onHand) {
-      const branchName = branches.find((b) => b.id === branchId)?.name ?? 'this branch'
-      setError(
-        `Not enough stock for ${skuLabel(selectedSku)} at ${branchName} — ${onHand} sack(s) on hand, ${qty} requested. Receive stock first.`,
-      )
-      return
-    }
+
+    setSavingSale(true)
     try {
       const id = await createSale({
         branchId,
         customerId,
         paymentType,
-        items: [
-          {
-            sku_id: selectedSku.id,
-            sacks: Number(sacks),
-            price_per_sack: Number(price),
-          },
-        ],
+        items: lines.map((line) => ({
+          sku_id: line.skuId,
+          sacks: line.sacks,
+          price_per_sack: line.pricePerSack,
+        })),
         orNumber: orNumber || undefined,
         drNumber: drNumber || undefined,
         downPayment: paymentType === 'installment' ? Number(downPayment || 0) : undefined,
@@ -421,7 +532,7 @@ export function SalesPage() {
           splitPayment && paymentType !== 'installment'
             ? [
                 { method: 'gcash', amount: Math.round(gcashPart * 100) / 100 },
-                { method: 'cash', amount: Math.round((total - gcashPart) * 100) / 100 },
+                { method: 'cash', amount: Math.round((saleTotal - gcashPart) * 100) / 100 },
               ]
             : undefined,
       })
@@ -429,13 +540,15 @@ export function SalesPage() {
       if (printDr) {
         setReceiptSale(sale)
         setTab('receipt')
+        setNewSaleOpen(false)
       }
       setMessage(
         printDr
           ? `Sale saved · DR ${sale?.dr_number ?? ''}. Stock deducted.`
-          : `Sale saved · DR ${sale?.dr_number ?? ''}. Print it later from the DR button in Sales history.`,
+          : `Sale saved · DR ${sale?.dr_number ?? ''}. Customer kept — add another variant or close when done.`,
       )
-      setNewSaleOpen(false)
+      // Keep the customer selected so the next variants for the same buyer skip the picker.
+      setCart([])
       setSacks('20')
       setOrNumber('')
       setDrNumber('')
@@ -445,6 +558,8 @@ export function SalesPage() {
       await load()
     } catch (e) {
       setError(describeSaleError(e))
+    } finally {
+      setSavingSale(false)
     }
   }
 
@@ -692,12 +807,23 @@ export function SalesPage() {
       ) : null}
 
       <div className="sale-summary">
-        <div className="sale-summary-row">
-          <span className="muted">
-            {sacks || 0} sack(s) × {formatPhp(Number(price || 0))}
-          </span>
-          <span>{formatPhp(total)}</span>
-        </div>
+        {cart.length > 0 ? (
+          cart.map((line) => (
+            <div key={line.id} className="sale-summary-row">
+              <span className="muted">
+                {line.label} · {formatQty(line.sacks)} × {formatPhp(line.pricePerSack)}
+              </span>
+              <span>{formatPhp(line.lineTotal)}</span>
+            </div>
+          ))
+        ) : (
+          <div className="sale-summary-row">
+            <span className="muted">
+              {sacks || 0} sack(s) × {formatPhp(Number(price || 0))}
+            </span>
+            <span>{formatPhp(draftLineTotal)}</span>
+          </div>
+        )}
         {paymentType === 'installment' ? (
           <>
             <div className="sale-summary-row">
@@ -723,7 +849,7 @@ export function SalesPage() {
           </>
         ) : null}
         <div className="sale-total-bar">
-          <span className="muted">Total</span>
+          <span className="muted">Total{cart.length > 1 ? ` · ${cart.length} lines` : ''}</span>
           <strong>{formatPhp(total)}</strong>
         </div>
       </div>
@@ -776,19 +902,31 @@ export function SalesPage() {
         aside={newSaleAside}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setNewSaleOpen(false)}>
-              Cancel
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setNewSaleOpen(false)
+                setCart([])
+              }}
+            >
+              {cart.length > 0 || customerId ? 'Done' : 'Cancel'}
             </Button>
             <Button
               type="submit"
               variant="secondary"
               form="new-sale-form"
               value="save-print"
-              disabled={!selectedSku || !customerId}
+              disabled={(!selectedSku && cart.length === 0) || !customerId || savingSale}
+              loading={savingSale}
             >
               Save sale & print DR
             </Button>
-            <Button type="submit" form="new-sale-form" disabled={!selectedSku || !customerId}>
+            <Button
+              type="submit"
+              form="new-sale-form"
+              disabled={(!selectedSku && cart.length === 0) || !customerId || savingSale}
+              loading={savingSale}
+            >
               Save sale
             </Button>
           </>
@@ -807,7 +945,11 @@ export function SalesPage() {
               </Field>
             )}
 
-            <Field label="Customer" htmlFor="sale-customer" hint="Type a name or contact number to search.">
+            <Field
+              label="Customer"
+              htmlFor="sale-customer"
+              hint="Pick once — add every variety they want before saving."
+            >
               <Combobox
                 id="sale-customer"
                 value={customerId}
@@ -836,6 +978,32 @@ export function SalesPage() {
               </div>
             ) : null}
 
+            {cart.length > 0 ? (
+              <div className="stack" style={{ gap: 8 }}>
+                <span className="field-label" style={{ marginBottom: 0 }}>
+                  Lines on this sale ({cart.length})
+                </span>
+                {cart.map((line) => (
+                  <div key={line.id} className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 160 }}>
+                      <strong>{line.label}</strong>
+                      <p className="faint" style={{ margin: 0 }}>
+                        {formatQty(line.sacks)} sack(s) × {formatPhp(line.pricePerSack)} ={' '}
+                        {formatPhp(line.lineTotal)}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setCart((prev) => prev.filter((l) => l.id !== line.id))}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
             <div>
               <label className="field-label">Rice variety</label>
               <ChipRow>
@@ -861,7 +1029,7 @@ export function SalesPage() {
             <Field label="Sacks" htmlFor="sale-sacks">
               <TextInput
                 id="sale-sacks"
-                required
+                required={cart.length === 0}
                 inputMode="decimal"
                 value={sacks}
                 onChange={(e) => setSacks(e.target.value)}
@@ -871,7 +1039,7 @@ export function SalesPage() {
             <Field label="Price per sack (₱)" htmlFor="sale-price">
               <TextInput
                 id="sale-price"
-                required
+                required={cart.length === 0}
                 inputMode="decimal"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
@@ -898,6 +1066,21 @@ export function SalesPage() {
               </p>
             ) : null}
 
+            <div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={onAddCartLine}
+                disabled={!selectedSku || !customerId}
+              >
+                + Add variety to sale
+              </Button>
+              <p className="faint" style={{ marginTop: 6 }}>
+                Keep adding varieties for this customer, then Save once. Or Save with a single variety without
+                adding to the list.
+              </p>
+            </div>
+
             <div className="row" style={{ alignItems: 'flex-start' }}>
               <div style={{ flex: 1 }}>
                 <Field
@@ -920,7 +1103,9 @@ export function SalesPage() {
               </div>
             </div>
 
-            {!selectedSku ? <p className="error-banner">No rice variety for this sack size.</p> : null}
+            {!selectedSku && cart.length === 0 ? (
+              <p className="error-banner">No rice variety for this sack size.</p>
+            ) : null}
           </form>
       </Modal>
 

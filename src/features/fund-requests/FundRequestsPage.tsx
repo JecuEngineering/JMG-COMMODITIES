@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/Button'
 import { Card } from '../../components/Card'
 import { Chip, ChipRow } from '../../components/Chip'
-import { Field, SelectInput, TextArea, TextInput } from '../../components/Field'
+import { Field, SelectInput, TextInput } from '../../components/Field'
 import { SkeletonTable } from '../../components/Loading'
-import { Modal } from '../../components/Modal'
 import { Pagination, usePaged } from '../../components/Pagination'
 import { ScopePill } from '../../components/ScopePill'
 import { Table } from '../../components/Table'
@@ -25,7 +24,6 @@ import {
 import { fetchFundBalances, type PcfFundBalance } from '../pcf/pcfApi'
 import {
   approveFundRequest,
-  createFundRequest,
   fetchFundRequests,
   fetchSteps,
   forwardFundRequest,
@@ -38,8 +36,6 @@ import {
   type ReleaseMethod,
 } from './fundRequestsApi'
 import { RequestFundPanel } from './RequestFundPanel'
-
-const CATEGORIES = ['Supplies', 'Transportation', 'Equipment', 'Repairs', 'Utilities', 'Food', 'Other']
 
 const TYPE_LABELS: Record<FundRequestType, string> = {
   cash_advance: 'Cash advance',
@@ -91,13 +87,8 @@ export function FundRequestsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [steps, setSteps] = useState<FundRequestStep[]>([])
 
-  // create form
+  // create form — Request for Fund sheet (manual unit/item lines)
   const [requestOpen, setRequestOpen] = useState(false)
-  const [fType, setFType] = useState<FundRequestType>('cash_advance')
-  const [fPurpose, setFPurpose] = useState('')
-  const [fCategory, setFCategory] = useState(CATEGORIES[0])
-  const [fAmount, setFAmount] = useState('')
-  const [fNotes, setFNotes] = useState('')
 
   // action forms
   const [rejectReason, setRejectReason] = useState('')
@@ -190,41 +181,6 @@ export function FundRequestsPage() {
         r.release_reference ?? '',
       ]),
     )
-  }
-
-  function resetForms() {
-    setFType('cash_advance')
-    setFPurpose('')
-    setFAmount('')
-    setFNotes('')
-    setRejectReason('')
-    setReleaseRef('')
-    setReleaseBank('')
-  }
-
-  async function onCreate(event: FormEvent) {
-    event.preventDefault()
-    if (!canCreate) return
-    setError(null)
-    setMessage(null)
-    try {
-      const req = await createFundRequest({
-        requesterId: user!.id,
-        branchId: profileBranchId ?? '',
-        purpose: fPurpose,
-        category: fCategory,
-        requestType: fType,
-        amount: Number(fAmount),
-        notes: fNotes,
-      })
-      setRequestOpen(false)
-      setMessage('Draft created. Submit it when ready.')
-      resetForms()
-      setSelectedId(req.id)
-      await load()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-    }
   }
 
   async function onSubmit(id: string) {
@@ -326,7 +282,17 @@ export function FundRequestsPage() {
           <h1>Fund Requests</h1>
           <p>Request → BA review → Owner approve → GA release → Liquidation.</p>
         </div>
-        {canCreate ? <Button onClick={() => setRequestOpen(true)}>New request</Button> : null}
+        {canCreate ? (
+          <Button
+            onClick={() => {
+              setRequestOpen(true)
+              setSelectedId(null)
+              setTab('mine')
+            }}
+          >
+            New request
+          </Button>
+        ) : null}
       </div>
 
       {error && !requestOpen ? <div className="error-banner">{error}</div> : null}
@@ -335,74 +301,36 @@ export function FundRequestsPage() {
       <div className="no-print">
         <ChipRow>
           {tabs.filter((t) => t.show).map((t) => (
-            <Chip key={t.id} active={tab === t.id} onClick={() => { setTab(t.id); setSelectedId(null) }}>
+            <Chip
+              key={t.id}
+              active={tab === t.id && !requestOpen}
+              onClick={() => {
+                setTab(t.id)
+                setSelectedId(null)
+                setRequestOpen(false)
+              }}
+            >
               {t.label}
             </Chip>
           ))}
         </ChipRow>
       </div>
 
-      {canCreate && tab === 'mine' ? (
-        <Modal
-          open={requestOpen}
-          onClose={() => setRequestOpen(false)}
-          title="New fund request"
-          subtitle="Saved as a draft — submit it when you are ready for review."
-          footer={
-            <>
-              <Button variant="secondary" onClick={() => setRequestOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" form="fund-request-form">
-                Save draft
-              </Button>
-            </>
-          }
-        >
-          <form id="fund-request-form" className="stack" onSubmit={onCreate}>
-            {error ? <div className="error-banner">{error}</div> : null}
-            <Field label="Request type" htmlFor="fr-type">
-              <SelectInput
-                id="fr-type"
-                value={fType}
-                onChange={(e) => setFType(e.target.value as FundRequestType)}
-              >
-                {(Object.keys(TYPE_LABELS) as FundRequestType[]).map((t) => (
-                  <option key={t} value={t}>{TYPE_LABELS[t]}</option>
-                ))}
-              </SelectInput>
-            </Field>
-            <Field label="Purpose" htmlFor="fr-purpose">
-              <TextInput id="fr-purpose" required value={fPurpose} onChange={(e) => setFPurpose(e.target.value)} />
-            </Field>
-            <Field label="Category" htmlFor="fr-category">
-              <SelectInput id="fr-category" value={fCategory} onChange={(e) => setFCategory(e.target.value)}>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </SelectInput>
-            </Field>
-            <Field label="Amount (₱)" htmlFor="fr-amount">
-              <TextInput
-                id="fr-amount"
-                type="number"
-                min="0.01"
-                step="0.01"
-                required
-                value={fAmount}
-                onChange={(e) => setFAmount(e.target.value)}
-              />
-            </Field>
-            <Field label="Notes" htmlFor="fr-notes">
-              <TextArea id="fr-notes" value={fNotes} onChange={(e) => setFNotes(e.target.value)} />
-            </Field>
-          </form>
-        </Modal>
-      ) : null}
+      {loading && requests.length === 0 && !requestOpen ? <SkeletonTable rows={5} cols={5} /> : null}
 
-      {loading && requests.length === 0 ? <SkeletonTable rows={5} cols={5} /> : null}
-
-      {tab === 'rfh' ? (
+      {canCreate && requestOpen ? (
+        <RequestFundPanel
+          funds={funds}
+          mode="manual"
+          onCancel={() => setRequestOpen(false)}
+          onCreated={async () => {
+            setMessage('Draft created. Submit it from My requests when ready.')
+            setRequestOpen(false)
+            setTab('mine')
+            await load()
+          }}
+        />
+      ) : tab === 'rfh' ? (
         <RequestFundPanel funds={funds} onCreated={load} />
       ) : (
       <Card
