@@ -26,6 +26,7 @@ import {
   createFund,
   createReplenishment,
   createVoucher,
+  deleteVoucher,
   fetchFundBalances,
   fetchPeriods,
   fetchReplenishments,
@@ -33,6 +34,7 @@ import {
   fetchVouchers,
   pcfClassification,
   pcfReceiptUrl,
+  updateVoucher,
   type PcfFundBalance,
   type PcfPeriod,
   type PcfReplenishment,
@@ -104,6 +106,9 @@ export function PcfPage() {
   const [vPurpose, setVPurpose] = useState('')
   const [fundOpen, setFundOpen] = useState(false)
   const [voucherOpen, setVoucherOpen] = useState(false)
+  const [editingVoucher, setEditingVoucher] = useState<PcfVoucher | null>(null)
+  const [deletingVoucher, setDeletingVoucher] = useState<PcfVoucher | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const [replenishOpen, setReplenishOpen] = useState(false)
   const [vCategory, setVCategory] = useState<string>(PCF_CLASSIFICATIONS[4])
   const [vAmount, setVAmount] = useState('')
@@ -362,6 +367,38 @@ export function PcfPage() {
     )
   }
 
+  function resetVoucherForm() {
+    setVDate(todayInputValue())
+    setVPayee('')
+    setVPurpose('')
+    setVCategory(PCF_CLASSIFICATIONS[4])
+    setVAmount('')
+    setVFile(null)
+    setVFileKey((k) => k + 1)
+  }
+
+  function openNewVoucher() {
+    setEditingVoucher(null)
+    resetVoucherForm()
+    setError(null)
+    setMessage(null)
+    setVoucherOpen(true)
+  }
+
+  function openEditVoucher(voucher: PcfVoucher) {
+    setEditingVoucher(voucher)
+    setVDate(voucher.voucher_date)
+    setVPayee(voucher.payee)
+    setVPurpose(voucher.purpose ?? '')
+    setVCategory(pcfClassification(voucher.category))
+    setVAmount(String(voucher.amount))
+    setVFile(null)
+    setVFileKey((k) => k + 1)
+    setError(null)
+    setMessage(null)
+    setVoucherOpen(true)
+  }
+
   async function onVoucherSubmit(event: FormEvent) {
     event.preventDefault()
     if (!canManage || !selectedFundId) return
@@ -379,14 +416,15 @@ export function PcfPage() {
       setError('Enter an amount greater than zero.')
       return
     }
-    if (Number(vAmount) > PCF_VOUCHER_LIMIT) {
+    const previousAmount = editingVoucher ? Number(editingVoucher.amount) : undefined
+    if (Number(vAmount) > PCF_VOUCHER_LIMIT && Number(vAmount) !== previousAmount) {
       setError(
         `Petty cash vouchers are limited to ${formatPhp(PCF_VOUCHER_LIMIT)}. Use Fund Requests for larger expenses.`,
       )
       return
     }
     try {
-      let receiptPath: string | null = null
+      let receiptPath: string | undefined
       if (vFile) {
         const safeName = vFile.name.replace(/[^\w.-]+/g, '_')
         const path = `${selectedFundId}/${Date.now()}-${safeName}`
@@ -394,27 +432,58 @@ export function PcfPage() {
         if (upErr) throw upErr
         receiptPath = path
       }
-      await createVoucher({
-        fundId: selectedFundId,
-        voucherDate: vDate,
-        payee: vPayee,
-        purpose: vPurpose,
-        category: vCategory,
-        amount: Number(vAmount),
-        receiptPath,
-        createdBy: user!.id,
-      })
+      if (editingVoucher) {
+        await updateVoucher({
+          id: editingVoucher.id,
+          voucherDate: vDate,
+          payee: vPayee,
+          purpose: vPurpose,
+          category: vCategory,
+          amount: Number(vAmount),
+          previousAmount,
+          receiptPath,
+        })
+        setMessage('Expense updated.')
+      } else {
+        await createVoucher({
+          fundId: selectedFundId,
+          voucherDate: vDate,
+          payee: vPayee,
+          purpose: vPurpose,
+          category: vCategory,
+          amount: Number(vAmount),
+          receiptPath: receiptPath ?? null,
+          createdBy: user!.id,
+        })
+        setMessage('Voucher saved.')
+      }
       setVoucherOpen(false)
-      setMessage('Voucher saved.')
-      setVPayee('')
-      setVPurpose('')
-      setVAmount('')
-      setVFile(null)
-      setVFileKey((k) => k + 1)
+      setEditingVoucher(null)
+      resetVoucherForm()
       await load()
       await loadFundDetail(selectedFundId)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function confirmDeleteVoucher() {
+    if (!canManage || !deletingVoucher) return
+    const voucher = deletingVoucher
+    setDeleteBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await deleteVoucher(voucher.id)
+      setMessage(`Expense ${voucherRef(voucher)} deleted.`)
+      setDeletingVoucher(null)
+      await load()
+      await loadFundDetail(selectedFundId)
+    } catch (e) {
+      setDeletingVoucher(null)
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDeleteBusy(false)
     }
   }
 
@@ -732,7 +801,7 @@ export function PcfPage() {
             </Button>
           ) : null}
           {canManage && selectedFund ? (
-            <Button onClick={() => setVoucherOpen(true)}>Add expense</Button>
+            <Button onClick={openNewVoucher}>Add expense</Button>
           ) : null}
         </div>
       </div>
@@ -1018,7 +1087,7 @@ export function PcfPage() {
                   >
                     End sheet / Cut
                   </Button>
-                  <Button onClick={() => setVoucherOpen(true)}>Add expense</Button>
+                  <Button onClick={openNewVoucher}>Add expense</Button>
                 </div>
               ) : null
             }
@@ -1124,6 +1193,7 @@ export function PcfPage() {
                     <th>Amount</th>
                     <th>Receipt</th>
                     <th>Status</th>
+                    {canManage ? <th>Actions</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -1141,6 +1211,18 @@ export function PcfPage() {
                           {unrecoveredIds.has(v.id) ? 'Not replenished' : 'Replenished'}
                         </span>
                       </td>
+                      {canManage ? (
+                        <td>
+                          <div className="row" style={{ gap: 6 }}>
+                            <Button variant="ghost" onClick={() => openEditVoucher(v)}>
+                              Edit
+                            </Button>
+                            <Button variant="ghost" onClick={() => setDeletingVoucher(v)}>
+                              Delete
+                            </Button>
+                          </div>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>
@@ -1152,7 +1234,7 @@ export function PcfPage() {
                     <td className="pcf-cell-amount">
                       <strong>{formatPhp(filteredVoucherTotal)}</strong>
                     </td>
-                    <td colSpan={2} />
+                    <td colSpan={canManage ? 3 : 2} />
                   </tr>
                 </tfoot>
               </Table>
@@ -1424,17 +1506,30 @@ export function PcfPage() {
       {canManage && selectedFund ? (
         <Modal
           open={voucherOpen}
-          onClose={() => setVoucherOpen(false)}
-          title="New expense"
-          subtitle="Petty cash paid out — attach the receipt photo or PDF."
+          onClose={() => {
+            setVoucherOpen(false)
+            setEditingVoucher(null)
+          }}
+          title={editingVoucher ? 'Edit expense' : 'New expense'}
+          subtitle={
+            editingVoucher
+              ? `Correcting ${voucherRef(editingVoucher)} · ${formatPhp(editingVoucher.amount)}`
+              : 'Petty cash paid out — attach the receipt photo or PDF.'
+          }
           size="sm"
           footer={
             <>
-              <Button variant="secondary" onClick={() => setVoucherOpen(false)}>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setVoucherOpen(false)
+                  setEditingVoucher(null)
+                }}
+              >
                 Cancel
               </Button>
               <Button type="submit" form="pcf-voucher-form">
-                Save expense
+                {editingVoucher ? 'Update expense' : 'Save expense'}
               </Button>
             </>
           }
@@ -1676,6 +1771,40 @@ export function PcfPage() {
           </form>
         </Modal>
       ) : null}
+
+      <Modal
+        open={Boolean(deletingVoucher)}
+        onClose={() => {
+          if (!deleteBusy) setDeletingVoucher(null)
+        }}
+        title="Delete expense"
+        subtitle={deletingVoucher ? voucherRef(deletingVoucher) : undefined}
+        size="sm"
+        busy={deleteBusy}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeletingVoucher(null)} disabled={deleteBusy}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={() => void confirmDeleteVoucher()} loading={deleteBusy}>
+              Delete expense
+            </Button>
+          </>
+        }
+      >
+        <div className="stack">
+          <p className="muted">
+            This removes{' '}
+            {deletingVoucher ? (
+              <>
+                <strong>{voucherRef(deletingVoucher)}</strong> · {deletingVoucher.payee} ·{' '}
+                {formatPhp(deletingVoucher.amount)}
+              </>
+            ) : null}{' '}
+            from the fund and restores the balance. The entry is kept on file for audit.
+          </p>
+        </div>
+      </Modal>
 
       <input
         ref={receiptInputRef}

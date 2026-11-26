@@ -16,6 +16,7 @@ export const PCF_CLASSIFICATIONS = [
   'REPAIR & MAINTENANCE',
   'TAXES & LICENSES',
   'CONTAINER CHARGES',
+  'REPRESENTATION',
   'OTHER TOOLS &EQUIPMENTS',
   'Bank Charges',
   'GAS & OIL',
@@ -210,6 +211,47 @@ export async function createVoucher(input: {
     .single()
   if (error) throw error
   return data as PcfVoucher
+}
+
+/** Correct a logged expense. `amount` is sent only when it changed so the
+ *  ₱5,000 petty-cash cap never blocks edits to an already-booked amount. */
+export async function updateVoucher(input: {
+  id: string
+  voucherDate: string
+  payee: string
+  purpose?: string
+  category?: string
+  amount: number
+  previousAmount?: number
+  receiptPath?: string | null
+}): Promise<PcfVoucher> {
+  const patch: Record<string, unknown> = {
+    voucher_date: input.voucherDate,
+    payee: input.payee,
+    purpose: input.purpose || null,
+    category: input.category || null,
+  }
+  if (input.previousAmount === undefined || Number(input.previousAmount) !== Number(input.amount)) {
+    patch.amount = input.amount
+  }
+  if (input.receiptPath !== undefined) patch.receipt_path = input.receiptPath
+  const { data, error } = await supabase
+    .from('pcf_vouchers')
+    .update(patch)
+    .eq('id', input.id)
+    .select('*')
+    .single()
+  if (error) throw error
+  return data as PcfVoucher
+}
+
+/** Remove a logged expense from the fund (soft delete). */
+export async function deleteVoucher(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('pcf_vouchers')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
 }
 
 export async function fetchPeriods(fundId?: string): Promise<PcfPeriod[]> {
