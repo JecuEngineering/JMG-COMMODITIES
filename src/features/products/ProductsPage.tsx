@@ -459,7 +459,9 @@ export function ProductsPage() {
         subtitle={
           canEditPrices
             ? 'Owner and General Accountant can set prices. Inserts a new dated row.'
-            : 'View only for your role'
+            : role === 'warehouse'
+              ? 'Look up current rates for receiving. Owner and admin maintain the price list.'
+              : 'View only for your role'
         }
         action={canEditPrices ? <Button onClick={() => setPriceOpen(true)}>Set price</Button> : null}
       >

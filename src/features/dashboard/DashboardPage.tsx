@@ -8,6 +8,7 @@ import { Table } from '../../components/Table'
 import { useAuth } from '../auth/AuthContext'
 import {
   canViewAllBranchesReports,
+  canViewContainers,
   canViewFundRequests,
   canViewInventory,
   canViewPcf,
@@ -25,8 +26,9 @@ import {
 } from '../sales/salesApi'
 import { fetchFundBalances, type PcfFundBalance } from '../pcf/pcfApi'
 import { fetchFundRequests, type FundRequest, type FundRequestStatus } from '../fund-requests/fundRequestsApi'
+import { fetchContainers, type Container } from '../containers/containersApi'
 import { formatPhp } from '../../lib/money'
-import { todayInputValue, toDateInputValue } from '../../lib/dates'
+import { formatDate, todayInputValue, toDateInputValue } from '../../lib/dates'
 import type { Branch } from '../../types/database'
 import './dashboard.css'
 
@@ -40,9 +42,21 @@ const REQUEST_STATUS: Record<string, { label: string; tone: 'warning' | 'ok' }> 
   submitted: { label: 'Waiting on accounting', tone: 'warning' },
   forwarded: { label: 'Waiting on owner', tone: 'warning' },
   approved: { label: 'Ready to release', tone: 'ok' },
+  draft: { label: 'Draft', tone: 'warning' },
+  released: { label: 'Released', tone: 'ok' },
+  rejected: { label: 'Rejected', tone: 'warning' },
+}
+
+const CONTAINER_STATUS: Record<string, { label: string; tone: 'warning' | 'ok' | 'muted' | 'danger' }> = {
+  in_transit: { label: 'In transit', tone: 'warning' },
+  arrived: { label: 'Arrived', tone: 'ok' },
+  unloading: { label: 'Unloading', tone: 'warning' },
+  received: { label: 'Received', tone: 'muted' },
+  closed: { label: 'Closed', tone: 'muted' },
 }
 
 const STATUS_RANK = { out: 0, low: 1, ok: 2 } as const
+const ACTIVE_CONTAINER = new Set(['in_transit', 'arrived', 'unloading'])
 
 function compactPhp(value: number) {
   if (Math.abs(value) >= 1_000_000) {
@@ -65,9 +79,11 @@ export function DashboardPage() {
   const { user } = useAuth()
   const role = user!.profile.role
   const profileBranchId = user!.profile.branch_id
+  const isWarehouse = role === 'warehouse'
   const canViewAll = canViewAllBranchesReports(role)
-  const salesAccess = canViewSales(role)
+  const salesAccess = canViewSales(role) && !isWarehouse
   const stockAccess = canViewInventory(role)
+  const containersAccess = canViewContainers(role)
   const pcfAccess = canViewPcf(role)
   const requestsAccess = canViewFundRequests(role)
 
@@ -79,6 +95,7 @@ export function DashboardPage() {
   const [balances, setBalances] = useState<StockBalanceRow[]>([])
   const [funds, setFunds] = useState<PcfFundBalance[]>([])
   const [fundRequests, setFundRequests] = useState<FundRequest[]>([])
+  const [containers, setContainers] = useState<Container[]>([])
   const [paymentsToday, setPaymentsToday] = useState(0)
   const [paymentsYesterday, setPaymentsYesterday] = useState(0)
   const [overdueCount, setOverdueCount] = useState(0)
@@ -105,17 +122,27 @@ export function DashboardPage() {
       setLoading(true)
       setError('')
       try {
-        const [dayRows, openBalance, varietyTotalsRows, balanceRows, fundRows, requestRows, cashRows, dueRows] =
-          await Promise.all([
-            salesAccess ? fetchSalesDayTotals(branchFilter, since) : Promise.resolve([]),
-            salesAccess ? fetchOpenBalanceTotal(branchFilter) : Promise.resolve({ total: 0, count: 0 }),
-            salesAccess ? fetchVarietyTotals(branchFilter, since) : Promise.resolve([]),
-            stockAccess ? fetchStockBalances(branchFilter) : Promise.resolve([]),
-            pcfAccess ? fetchFundBalances() : Promise.resolve([]),
-            requestsAccess ? fetchFundRequests() : Promise.resolve([]),
-            salesAccess ? fetchCashCollected(branchFilter, [today, yesterday]) : Promise.resolve([]),
-            salesAccess ? fetchOverdueDues() : Promise.resolve([]),
-          ])
+        const [
+          dayRows,
+          openBalance,
+          varietyTotalsRows,
+          balanceRows,
+          fundRows,
+          requestRows,
+          cashRows,
+          dueRows,
+          containerRows,
+        ] = await Promise.all([
+          salesAccess ? fetchSalesDayTotals(branchFilter, since) : Promise.resolve([]),
+          salesAccess ? fetchOpenBalanceTotal(branchFilter) : Promise.resolve({ total: 0, count: 0 }),
+          salesAccess ? fetchVarietyTotals(branchFilter, since) : Promise.resolve([]),
+          stockAccess ? fetchStockBalances(branchFilter) : Promise.resolve([]),
+          pcfAccess ? fetchFundBalances() : Promise.resolve([]),
+          requestsAccess ? fetchFundRequests() : Promise.resolve([]),
+          salesAccess ? fetchCashCollected(branchFilter, [today, yesterday]) : Promise.resolve([]),
+          salesAccess ? fetchOverdueDues() : Promise.resolve([]),
+          containersAccess ? fetchContainers() : Promise.resolve([]),
+        ])
         if (cancelled) return
 
         const scopedDues = (dueRows as InstallmentDue[]).filter(
@@ -128,6 +155,7 @@ export function DashboardPage() {
         setBalances(balanceRows)
         setFunds(fundRows)
         setFundRequests(requestRows)
+        setContainers(containerRows)
         setPaymentsToday(cashRows.filter((p) => p.payment_date === today).reduce((sum, p) => sum + p.amount, 0))
         setPaymentsYesterday(
           cashRows.filter((p) => p.payment_date === yesterday).reduce((sum, p) => sum + p.amount, 0),
@@ -144,7 +172,7 @@ export function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [branchId, pcfAccess, requestsAccess, role, salesAccess, stockAccess])
+  }, [branchId, containersAccess, pcfAccess, requestsAccess, role, salesAccess, stockAccess])
 
   const today = todayInputValue()
   const yesterdayDate = new Date()
@@ -202,8 +230,24 @@ export function DashboardPage() {
       .sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.onHand - b.onHand)
   })()
 
+  const stockOut = stockRows.filter((r) => r.status === 'out').length
+  const stockLow = stockRows.filter((r) => r.status === 'low').length
+  const stockOk = stockRows.filter((r) => r.status === 'ok').length
+  const totalSacks = stockRows.reduce((sum, r) => sum + r.onHand, 0)
+
+  const scopedContainers = containers.filter((c) => !branchId || c.primary_branch_id === branchId)
+  const activeContainers = scopedContainers.filter((c) => ACTIVE_CONTAINER.has(c.status))
+  const inTransit = activeContainers.filter((c) => c.status === 'in_transit').length
+  const arrivedOrUnloading = activeContainers.filter(
+    (c) => c.status === 'arrived' || c.status === 'unloading',
+  ).length
+  const expectedSacksInbound = activeContainers.reduce(
+    (sum, c) => sum + (c.lines?.reduce((lineSum, line) => lineSum + Number(line.expected_sacks || 0), 0) ?? 0),
+    0,
+  )
+
   const awaiting = (() => {
-    if (!requestsAccess) return []
+    if (!requestsAccess || isWarehouse) return []
     let statuses = ACTIONABLE[role as string]
     if (role === 'system_admin') statuses = ['submitted', 'forwarded', 'approved']
     if (!statuses) statuses = ['submitted', 'forwarded', 'approved']
@@ -217,8 +261,20 @@ export function DashboardPage() {
       ? 'Nothing waiting on you'
       : [...new Set(awaiting.map((r) => REQUEST_STATUS[r.status]?.label ?? r.status))].join(' · ')
 
-  const metricCount = (salesAccess ? 3 : 0) + (pcfAccess ? 1 : 0)
-  const panels = [salesAccess, stockAccess].filter(Boolean).length
+  const myRequests = (() => {
+    if (!isWarehouse || !requestsAccess) return []
+    return fundRequests
+      .filter((r) => r.requester_id === user!.id)
+      .filter((r) => !['released', 'rejected', 'liquidated'].includes(r.status))
+      .slice(0, 6)
+  })()
+  const myRequestsTotal = myRequests.reduce((sum, r) => sum + Number(r.amount), 0)
+
+  const warehouseMetricCount = isWarehouse ? 4 : 0
+  const metricCount = isWarehouse ? warehouseMetricCount : (salesAccess ? 3 : 0) + (pcfAccess ? 1 : 0)
+  const panels = isWarehouse
+    ? [stockAccess, containersAccess].filter(Boolean).length
+    : [salesAccess, stockAccess].filter(Boolean).length
 
   const dateStr = new Date().toLocaleDateString('en-PH', {
     month: 'long',
@@ -234,8 +290,12 @@ export function DashboardPage() {
       <div className="page-header">
         <div>
           <ScopePill label={scopeLabel} />
-          <h1>Dashboard</h1>
-          <p>Today · {dateStr}</p>
+          <h1>{isWarehouse ? 'Warehouse Inventory' : 'Dashboard'}</h1>
+          <p>
+            {isWarehouse
+              ? `Stock, inbound containers, and your fund requests · ${dateStr}`
+              : `Today · ${dateStr}`}
+          </p>
         </div>
         {canViewAll ? (
           <ScopeSelect
@@ -256,49 +316,135 @@ export function DashboardPage() {
         <div
           className={`dash-metrics${metricCount === 3 ? ' is-three' : ''}${metricCount === 2 ? ' is-two' : ''}`}
         >
-          {salesAccess ? (
+          {isWarehouse ? (
             <>
               <div className="dash-metric">
-                <span className="dash-metric-label">Today's sales</span>
-                <strong className="dash-metric-value num">{loading ? '—' : formatPhp(todaySales)}</strong>
+                <span className="dash-metric-label">Sacks on hand</span>
+                <strong className="dash-metric-value num">
+                  {loading ? '—' : integerFormat.format(totalSacks)}
+                </strong>
                 <span className="dash-metric-sub">
-                  {todayRows.length} sale{todayRows.length === 1 ? '' : 's'}
-                  {yesterdaySales > 0 ? ` · yesterday ${compactPhp(yesterdaySales)}` : ''}
+                  {stockRows.length} SKU{stockRows.length === 1 ? '' : 's'} · {stockOk} healthy
                 </span>
               </div>
-              <div className="dash-metric">
-                <span className="dash-metric-label">Cash on hand</span>
-                <strong className="dash-metric-value num">{loading ? '—' : formatPhp(paymentsToday)}</strong>
-                <span className="dash-metric-sub">
-                  Cash payments only
-                  {paymentsYesterday > 0 ? ` · yesterday ${compactPhp(paymentsYesterday)}` : ''}
+              <div className={`dash-metric${stockLow > 0 ? ' is-warning' : ''}`}>
+                <span className="dash-metric-label">Low stock</span>
+                <strong className="dash-metric-value num">{loading ? '—' : integerFormat.format(stockLow)}</strong>
+                <span className={`dash-metric-sub${stockLow > 0 ? ' is-warning' : ''}`}>
+                  {stockLow > 0 ? 'At or below reorder level' : 'All above reorder'}
                 </span>
               </div>
-              <div className="dash-metric">
-                <span className="dash-metric-label">Customer balances</span>
-                <strong className="dash-metric-value num">{loading ? '—' : formatPhp(receivables)}</strong>
-                <span className={`dash-metric-sub${overdueCount > 0 ? ' is-warning' : ''}`}>
-                  {overdueCount > 0
-                    ? `${overdueCount} overdue installment${overdueCount === 1 ? '' : 's'}`
-                    : 'Installments, no interest'}
+              <div className={`dash-metric${stockOut > 0 ? ' is-warning' : ''}`}>
+                <span className="dash-metric-label">Out of stock</span>
+                <strong className="dash-metric-value num">{loading ? '—' : integerFormat.format(stockOut)}</strong>
+                <span className={`dash-metric-sub${stockOut > 0 ? ' is-warning' : ''}`}>
+                  {stockOut > 0 ? 'Needs replenishment' : 'None empty'}
+                </span>
+              </div>
+              <div className={`dash-metric${arrivedOrUnloading > 0 ? ' is-warning' : ''}`}>
+                <span className="dash-metric-label">Inbound containers</span>
+                <strong className="dash-metric-value num">
+                  {loading ? '—' : integerFormat.format(activeContainers.length)}
+                </strong>
+                <span className={`dash-metric-sub${arrivedOrUnloading > 0 ? ' is-warning' : ''}`}>
+                  {inTransit} in transit
+                  {arrivedOrUnloading > 0 ? ` · ${arrivedOrUnloading} to receive` : ''}
+                  {expectedSacksInbound > 0 ? ` · ${integerFormat.format(expectedSacksInbound)} sacks ETA` : ''}
                 </span>
               </div>
             </>
-          ) : null}
-          {pcfAccess ? (
-            <div className={`dash-metric${pettyCashLow ? ' is-warning' : ''}`}>
-              <span className="dash-metric-label">Petty cash</span>
-              <strong className="dash-metric-value num">{loading ? '—' : formatPhp(pettyCash)}</strong>
-              <span className={`dash-metric-sub${pettyCashLow ? ' is-warning' : ''}`}>
-                {pettyCashLow ? 'Replenish soon' : 'Within threshold'}
-              </span>
-            </div>
-          ) : null}
+          ) : (
+            <>
+              {salesAccess ? (
+                <>
+                  <div className="dash-metric">
+                    <span className="dash-metric-label">Today's sales</span>
+                    <strong className="dash-metric-value num">{loading ? '—' : formatPhp(todaySales)}</strong>
+                    <span className="dash-metric-sub">
+                      {todayRows.length} sale{todayRows.length === 1 ? '' : 's'}
+                      {yesterdaySales > 0 ? ` · yesterday ${compactPhp(yesterdaySales)}` : ''}
+                    </span>
+                  </div>
+                  <div className="dash-metric">
+                    <span className="dash-metric-label">Cash on hand</span>
+                    <strong className="dash-metric-value num">{loading ? '—' : formatPhp(paymentsToday)}</strong>
+                    <span className="dash-metric-sub">
+                      Cash payments only
+                      {paymentsYesterday > 0 ? ` · yesterday ${compactPhp(paymentsYesterday)}` : ''}
+                    </span>
+                  </div>
+                  <div className="dash-metric">
+                    <span className="dash-metric-label">Customer balances</span>
+                    <strong className="dash-metric-value num">{loading ? '—' : formatPhp(receivables)}</strong>
+                    <span className={`dash-metric-sub${overdueCount > 0 ? ' is-warning' : ''}`}>
+                      {overdueCount > 0
+                        ? `${overdueCount} overdue installment${overdueCount === 1 ? '' : 's'}`
+                        : 'Installments, no interest'}
+                    </span>
+                  </div>
+                </>
+              ) : null}
+              {pcfAccess ? (
+                <div className={`dash-metric${pettyCashLow ? ' is-warning' : ''}`}>
+                  <span className="dash-metric-label">Petty cash</span>
+                  <strong className="dash-metric-value num">{loading ? '—' : formatPhp(pettyCash)}</strong>
+                  <span className={`dash-metric-sub${pettyCashLow ? ' is-warning' : ''}`}>
+                    {pettyCashLow ? 'Replenish soon' : 'Within threshold'}
+                  </span>
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
       ) : null}
 
       {panels > 0 ? (
         <div className={`dash-panels${panels === 1 ? ' is-single' : ''}`}>
+          {isWarehouse && containersAccess ? (
+            <Card
+              title="Containers to watch"
+              subtitle="In transit, arrived, or unloading"
+              action={
+                <Link className="dash-card-link" to="/app/containers">
+                  Open containers
+                </Link>
+              }
+            >
+              {loading ? (
+                <SkeletonText lines={4} />
+              ) : activeContainers.length === 0 ? (
+                <p className="faint">No active inbound containers for this branch.</p>
+              ) : (
+                <ul className="dash-stock-list">
+                  {activeContainers.slice(0, 6).map((c) => {
+                    const status = CONTAINER_STATUS[c.status]
+                    const sacks =
+                      c.lines?.reduce((sum, line) => sum + Number(line.expected_sacks || 0), 0) ?? 0
+                    const skuLabel =
+                      c.lines?.[0]?.sku?.variety?.name != null
+                        ? `${c.lines[0].sku!.variety!.name} · ${c.lines[0].sku!.sack_size}kg`
+                        : null
+                    return (
+                      <li className="dash-stock-row" key={c.id}>
+                        <span className="dash-stock-name">
+                          {c.container_number || c.supplier_ref}
+                          {skuLabel ? ` · ${skuLabel}` : ''}
+                          {c.expected_arrival ? ` · ETA ${formatDate(c.expected_arrival)}` : ''}
+                        </span>
+                        <span className="dash-stock-qty num">
+                          {sacks > 0 ? integerFormat.format(sacks) : '—'}
+                        </span>
+                        <span className={badgeClass(status?.tone ?? 'muted')}>
+                          {status?.label ?? c.status}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </Card>
+          ) : null}
+
           {salesAccess ? (
             <Card
               title="Sales by variety"
@@ -331,7 +477,7 @@ export function DashboardPage() {
           {stockAccess ? (
             <Card
               title="Stock on hand"
-              subtitle="Sacks per variety"
+              subtitle={isWarehouse ? 'Priority: out and low first' : 'Sacks per variety'}
               action={
                 <Link className="dash-card-link" to="/app/inventory">
                   View all
@@ -344,11 +490,15 @@ export function DashboardPage() {
                 <p className="faint">No stock balances for this scope yet.</p>
               ) : (
                 <ul className="dash-stock-list">
-                  {stockRows.slice(0, 6).map((row) => (
+                  {stockRows.slice(0, isWarehouse ? 8 : 6).map((row) => (
                     <li className="dash-stock-row" key={row.key}>
                       <span className="dash-stock-name">{row.label}</span>
                       <span className="dash-stock-qty num">{integerFormat.format(row.onHand)}</span>
-                      <span className={badgeClass(row.status === 'out' ? 'danger' : row.status === 'low' ? 'warning' : 'ok')}>
+                      <span
+                        className={badgeClass(
+                          row.status === 'out' ? 'danger' : row.status === 'low' ? 'warning' : 'ok',
+                        )}
+                      >
                         {row.status === 'out' ? 'Out' : row.status === 'low' ? 'Low' : 'OK'}
                       </span>
                     </li>
@@ -360,7 +510,76 @@ export function DashboardPage() {
         </div>
       ) : null}
 
-      {requestsAccess ? (
+      {isWarehouse ? (
+        <div className="dash-panels">
+          <Card
+            title="Products & prices"
+            subtitle="Company catalog used when receiving containers"
+            action={
+              <Link className="dash-card-link" to="/app/products">
+                Open catalog
+              </Link>
+            }
+          >
+            <p className="faint" style={{ lineHeight: 1.7, margin: 0 }}>
+              Look up rice varieties, sack sizes, barcodes, and current prices before you create or receive a
+              container. Owner and admin maintain the catalog; your receives post against those SKUs.
+            </p>
+            <div className="dash-quick-links" style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
+              <Link className="dash-card-link" to="/app/products">
+                Products & Prices
+              </Link>
+              <Link className="dash-card-link" to="/app/containers">
+                Add container
+              </Link>
+              <Link className="dash-card-link" to="/app/inventory">
+                Inventory
+              </Link>
+            </div>
+          </Card>
+
+          {requestsAccess ? (
+            <Card
+              title="My fund requests"
+              subtitle={
+                loading
+                  ? 'Checking requests…'
+                  : myRequests.length === 0
+                    ? 'No open requests'
+                    : `${myRequests.length} open · ${formatPhp(myRequestsTotal)}`
+              }
+              action={
+                <Link className="dash-card-link" to="/app/fund-requests">
+                  View all
+                </Link>
+              }
+            >
+              {loading ? (
+                <SkeletonText lines={3} />
+              ) : myRequests.length === 0 ? (
+                <p className="faint">You have no open fund requests.</p>
+              ) : (
+                <ul className="dash-stock-list">
+                  {myRequests.map((request) => {
+                    const status = REQUEST_STATUS[request.status]
+                    return (
+                      <li className="dash-stock-row" key={request.id}>
+                        <span className="dash-stock-name">{request.purpose}</span>
+                        <span className="dash-stock-qty num">{formatPhp(request.amount)}</span>
+                        <span className={badgeClass(status?.tone ?? 'muted')}>
+                          {status?.label ?? request.status}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </Card>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!isWarehouse && requestsAccess ? (
         <Card
           title="Fund requests awaiting action"
           subtitle={loading ? 'Checking requests…' : awaitingSubtitle}
@@ -443,7 +662,7 @@ export function DashboardPage() {
         </Card>
       ) : null}
 
-      {!salesAccess ? (
+      {!salesAccess && !isWarehouse ? (
         <Card title="Welcome to JMG Staff System">
           <p className="muted" style={{ lineHeight: 1.7 }}>
             Manage your assigned tasks from the sidebar. Sales, inventory, and report metrics appear here for roles with

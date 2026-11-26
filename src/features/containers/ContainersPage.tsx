@@ -16,6 +16,7 @@ import { formatDate, todayInputValue } from '../../lib/dates'
 import { downloadCsv } from '../../lib/export'
 import { formatPhp } from '../../lib/money'
 import {
+  canCreateContainers,
   canManageSuppliers,
   canReceiveContainers,
   canViewContainers,
@@ -57,6 +58,7 @@ export function ContainersPage() {
   const role = user!.profile.role
   const canView = canViewContainers(role)
   const canManage = canManageSuppliers(role)
+  const canCreate = canCreateContainers(role)
   const canReceive = canReceiveContainers(role)
   const profileBranchId = user!.profile.branch_id
 
@@ -250,9 +252,10 @@ export function ContainersPage() {
 
   async function onCreateContainer(event: FormEvent) {
     event.preventDefault()
-    if (!canManage && !canReceive) return
+    if (!canCreate) return
     setError(null)
     try {
+      const branchId = role === 'warehouse' && profileBranchId ? profileBranchId : cBranch
       const id = await createContainer({
         supplier_id: cSupplier,
         purchase_id: cPurchase || null,
@@ -260,9 +263,9 @@ export function ContainersPage() {
         supplier_ref: cRef.trim(),
         origin: cOrigin,
         expected_arrival: cEta || undefined,
-        primary_branch_id: cBranch,
+        primary_branch_id: branchId,
         notes: cNotes,
-        lines: [{ sku_id: cSku, branch_id: cBranch, expected_sacks: Number(cExpected) }],
+        lines: [{ sku_id: cSku, branch_id: branchId, expected_sacks: Number(cExpected) }],
       })
       setContOpen(false)
       setMessage('Container created as In transit.')
@@ -714,12 +717,12 @@ export function ContainersPage() {
 
       {tab === 'containers' ? (
         <div className="stack">
-          {(canManage || canReceive) && canManage ? (
+          {canCreate ? (
             <Modal
               open={contOpen}
               onClose={() => setContOpen(false)}
               title="New container"
-              subtitle="Starts as In transit with supplier reference."
+              subtitle="Starts as In transit with supplier reference. Owner and admin see it company-wide."
               size="lg"
               footer={
                 <>
@@ -765,15 +768,31 @@ export function ContainersPage() {
                   <DateInput id="c-eta" value={cEta} onChange={setCEta} />
                 </Field>
                 <Field label="Primary branch" htmlFor="c-branch">
-                  <SelectInput id="c-branch" required value={cBranch} onChange={(e) => setCBranch(e.target.value)}>
-                    {branches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </SelectInput>
+                  {role === 'warehouse' && profileBranchId ? (
+                    <SelectInput id="c-branch" required value={profileBranchId} disabled>
+                      {branches
+                        .filter((b) => b.id === profileBranchId)
+                        .map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                    </SelectInput>
+                  ) : (
+                    <SelectInput id="c-branch" required value={cBranch} onChange={(e) => setCBranch(e.target.value)}>
+                      {branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  )}
                 </Field>
-                <Field label="Rice variety" htmlFor="c-sku">
+                <Field
+                  label="Rice variety"
+                  htmlFor="c-sku"
+                  hint="From Products & Prices — owner sets the catalog and rates."
+                >
                   <SelectInput id="c-sku" required value={cSku} onChange={(e) => setCSku(e.target.value)}>
                     {skus.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -801,9 +820,7 @@ export function ContainersPage() {
             title="Container list"
             action={
               <div className="row">
-                {(canManage || canReceive) && canManage ? (
-                  <Button onClick={() => setContOpen(true)}>New container</Button>
-                ) : null}
+                {canCreate ? <Button onClick={() => setContOpen(true)}>New container</Button> : null}
                 {containers.length > 0 ? (
                   <Button variant="secondary" onClick={exportContainers}>
                     Export CSV

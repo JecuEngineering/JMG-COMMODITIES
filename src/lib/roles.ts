@@ -5,7 +5,7 @@ export const ROLE_LABELS: Record<AppRole, string> = {
   general_accountant: 'General Accountant',
   branch_accountant: 'Branch Accountant',
   cashier: 'Cashier',
-  warehouse: 'Warehouse',
+  warehouse: 'Warehouse Inventory',
   employee: 'Employee',
   system_admin: 'System Admin',
 }
@@ -233,6 +233,11 @@ export function canViewContainers(role: AppRole): boolean {
 
 export function canManageSuppliers(role: AppRole): boolean {
   return roleIn(role, ['owner', 'general_accountant'])
+}
+
+/** Warehouse Inventory (and receivers) may register inbound containers; owner/admin still see all. */
+export function canCreateContainers(role: AppRole): boolean {
+  return roleIn(role, ['warehouse', 'branch_accountant', 'owner'])
 }
 
 export function canReceiveContainers(role: AppRole): boolean {
