@@ -68,7 +68,7 @@ export const NAV_ITEMS: NavItem[] = [
     id: 'sales',
     label: 'Sales',
     path: '/app/sales',
-    roles: ['owner', 'general_accountant', 'branch_accountant', 'cashier'],
+    roles: ['owner', 'general_accountant', 'branch_accountant', 'cashier', 'warehouse'],
     group: 'sales',
     phoneTab: true,
   },
@@ -240,11 +240,11 @@ export function canReceiveContainers(role: AppRole): boolean {
 }
 
 export function canViewSales(role: AppRole): boolean {
-  return roleIn(role, ['owner', 'general_accountant', 'branch_accountant', 'cashier'])
+  return roleIn(role, ['owner', 'general_accountant', 'branch_accountant', 'cashier', 'warehouse'])
 }
 
 export function canCreateSales(role: AppRole): boolean {
-  return roleIn(role, ['owner', 'general_accountant', 'branch_accountant', 'cashier'])
+  return roleIn(role, ['owner', 'general_accountant', 'branch_accountant', 'cashier', 'warehouse'])
 }
 
 export function canViewAllBranchesSales(role: AppRole): boolean {
